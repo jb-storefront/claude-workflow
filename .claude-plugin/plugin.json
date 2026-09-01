@@ -1,0 +1,12 @@
+{
+  "name": "workflow",
+  "displayName": "Slice Workflow",
+  "version": "1.0.0",
+  "description": "Spec-to-merge loop for GitHub-tracked vertical slices, run in Claude Code cloud sessions: dispatch slices in parallel, drive each to a reviewed PR, and land the batch in dependency order.",
+  "author": {
+    "name": "Jacob Burcham"
+  },
+  "repository": "https://github.com/jb-storefront/claude-workflow",
+  "license": "MIT",
+  "keywords": ["workflow", "github", "issues", "pull-requests", "cloud-sessions"]
+}

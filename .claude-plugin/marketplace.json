@@ -1,0 +1,26 @@
+{
+  "name": "jb-workflow",
+  "owner": {
+    "name": "Jacob Burcham"
+  },
+  "metadata": {
+    "description": "Personal engineering workflow skills for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "workflow",
+      "description": "Spec-to-merge loop for GitHub-tracked vertical slices, run in Claude Code cloud sessions",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/dispatch-slices",
+        "./skills/start-issue",
+        "./skills/finalize-pr",
+        "./skills/rebase-pr",
+        "./skills/merge-pr",
+        "./skills/merge-stack"
+      ]
+    }
+  ]
+}
