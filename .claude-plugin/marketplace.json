@@ -11,16 +11,7 @@
     {
       "name": "workflow",
       "description": "Spec-to-merge loop for GitHub-tracked vertical slices, run in Claude Code cloud sessions",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/dispatch-slices",
-        "./skills/start-issue",
-        "./skills/finalize-pr",
-        "./skills/rebase-pr",
-        "./skills/merge-pr",
-        "./skills/merge-stack"
-      ]
+      "source": "./"
     }
   ]
 }
