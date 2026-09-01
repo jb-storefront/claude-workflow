@@ -79,19 +79,33 @@ Ask once. After approval, dispatch all of them without further prompting.
 
 One command per slice. Reference the parent so the session can read the spec for context.
 
+**`claude --cloud` refuses to run without a TTY**, and a skill's Bash calls are piped, so the
+bare command fails with *"--cloud requires an interactive terminal"*. Wrap each dispatch in a
+pty:
+
 **AFK slice:**
 
 ```bash
-claude --cloud "/start-issue {n} — refer to the spec in issue #{parent} for context — implement it with /tdd, then run /finalize-pr."
+script -q /dev/null claude --cloud "/start-issue {n} — refer to the spec in issue #{parent} for context — implement it with /tdd, then run /finalize-pr."
 ```
 
 **HITL slice** — the session must stop rather than self-certify:
 
 ```bash
-claude --cloud "/start-issue {n} — refer to the spec in issue #{parent} for context — implement it with /tdd. When the work is complete, push the branch and STOP: tell me it needs a manual smoke test and wait. Do not run /finalize-pr yourself."
+script -q /dev/null claude --cloud "/start-issue {n} — refer to the spec in issue #{parent} for context — implement it with /tdd. When the work is complete, push the branch and STOP: tell me it needs a manual smoke test and wait. Do not run /finalize-pr yourself."
 ```
 
+That is the macOS/BSD `script` spelling. On Linux the equivalent is
+`script -qec "claude --cloud '…'" /dev/null`.
+
 Capture each printed session ID.
+
+**If a dispatch stalls on a prompt, stop and hand the commands to the user.** The first
+`--cloud` run in a repo whose `.claude/settings.json` pre-approves permissions hits the
+workspace-trust dialog (*"This folder pre-approves N tool permissions… Do you trust this
+folder?"*). That is a security decision belonging to the human, not something to answer through
+a pty. Print the remaining commands for them to paste, and say why. Once they have accepted trust
+once, later dispatches run unattended.
 
 Notes that are easy to get wrong:
 
@@ -127,4 +141,5 @@ locally, then /finalize-pr from your terminal.
 - Never dispatch an issue that is assigned or already has an open PR.
 - One confirmation (§4), then run through the whole set.
 - Do not pass `--dangerously-skip-permissions`; permissions belong in the repo's committed settings.
+- Never answer a workspace-trust or permission prompt on the user's behalf, through a pty or otherwise. Hand it back.
 - If a `claude --cloud` invocation fails, report it and continue with the rest — a partial fan-out is fine and re-runnable, since §2 skips slices that are now assigned.
