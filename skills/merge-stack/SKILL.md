@@ -189,3 +189,4 @@ Strays:           none
 - Never merge a branch that is currently checked out in this repo — switch to `{default}` first.
 - One upfront confirmation (§3); then run unattended, pausing only on conflict / CI failure / unexpected PR state.
 - Respect the `--exclude` set; never merge it.
+- This skill expects a local checkout holding every branch in the batch, so it normally runs outside the cloud proxy. Run inside a cloud session, §4's `gh pr edit --base`, `gh pr merge`, and §5's `gh pr reopen` are all GraphQL mutations that can 403 with `This GraphQL query is not enabled for this session` — take the REST fallbacks in [references/github-proxy.md](../../references/github-proxy.md) rather than pausing the batch, and record which ones you used in §7.

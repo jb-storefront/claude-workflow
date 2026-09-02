@@ -39,7 +39,10 @@ Without: `gh issue list --state open --json number,title,labels,assignees --limi
 
 Then filter to **dispatchable** slices:
 
-- Drop anything already assigned (`assignees` non-empty) — it is in flight.
+- Drop anything already assigned (`assignees` non-empty) — it is in flight. This is the check that
+  covers the window before a PR exists, and it is load-bearing: `/start-issue` claims its issue as
+  step 2, before it creates anything, so a dispatched session shows up here within seconds rather
+  than only once its draft PR lands.
 - Drop anything with an open PR: `gh pr list --state open --json closingIssuesReferences` and exclude issues already referenced.
 - Drop anything whose body declares a dependency on a slice not yet merged (`## Blocked by #NN`, `Depends on #NN`). Report these as **held**, with what they wait on.
 

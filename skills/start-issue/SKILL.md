@@ -22,7 +22,7 @@ If the issue number is missing or invalid, run `gh issue list --state open --lim
 the user to pick.
 
 **`--no-branch` mode**: skip all branch/PR work and operate on the default branch. Run only
-steps 1 and 6. Useful for local work on `main`.
+steps 1, 2, and 7. Useful for local work on `main`.
 
 ## Steps
 
@@ -30,22 +30,42 @@ steps 1 and 6. Useful for local work on `main`.
    doesn't exist or isn't open, stop and report. If it is already assigned to someone else, stop
    — another session has it.
 
-2. **Build the branch name.** Prefix from labels, first matching rule wins: `bug` → `fix`;
+2. **Claim it.** Assign before creating anything, and stop if the claim doesn't stick.
+
+   ```bash
+   gh api -X POST "repos/{owner}/{repo}/issues/{number}/assignees" -f "assignees[]={login}"
+   gh api "repos/{owner}/{repo}/issues/{number}" --jq '.assignees[].login'
+   ```
+
+   `{owner}` and `{repo}` are **literal** — `gh api` fills them from the current repo. `{login}` =
+   `gh api user --jq '.login'`. If the read-back doesn't list `{login}`, **stop** —
+   the issue is unclaimed, so a second session can still take it, and everything after this step
+   would be work done twice. A 2xx on the POST is not enough: GitHub silently ignores assignees
+   who lack push access.
+
+   Do not use `gh issue edit --add-assignee`; it is a GraphQL mutation that fails behind the cloud
+   proxy. See [the proxy reference](../../references/github-proxy.md).
+
+   Claiming first is the point. The branch and the draft PR are also de-duplication signals —
+   `/dispatch-slices` §2 drops anything with an open PR — but they arrive several steps later, and
+   the window they leave open is exactly the one two sessions collide in.
+
+3. **Build the branch name.** Prefix from labels, first matching rule wins: `bug` → `fix`;
    `feature`/`enhancement` → `feat`; `refactor` → `refactor`; `docs`/`documentation` → `docs`;
    otherwise `chore`.
 
    Branch is `{prefix}/{number}-{slug}`. Slug: lowercase, non-alphanumeric → hyphens, collapse
    repeats, trim, truncate ≤50 chars without cutting mid-word, strip trailing hyphens.
 
-3. **Create the branch.** `git checkout -b {branch}`
+4. **Create the branch.** `git checkout -b {branch}`
 
    Nothing to reset: the clone is fresh and at the base branch the dispatcher chose. If the
    branch name already exists — only possible when re-running in the same session — reuse it and
-   skip to step 5.
+   skip to step 6.
 
-4. **Initial empty commit.** `git commit --allow-empty -m "chore: start work on #{number}"`
+5. **Initial empty commit.** `git commit --allow-empty -m "chore: start work on #{number}"`
 
-5. **Push and open a draft PR.**
+6. **Push and open a draft PR.**
 
    ```
    git push -u origin {branch}
@@ -64,9 +84,14 @@ steps 1 and 6. Useful for local work on `main`.
    The draft PR exists from the start so CI runs against the work as it lands, and so
    `/finalize-pr` has a stable target. `/finalize-pr` rewrites this body later.
 
-   Then assign: `gh issue edit {number} --add-assignee @me`. Warn but don't stop on failure.
+   Keep `Closes #{number}` as the body's first line. It is what `/finalize-pr` and `/merge-pr`
+   fall back to when the proxy blocks the GraphQL-only `closingIssuesReferences` field.
 
-6. **Print the summary.**
+   If `gh pr create` itself fails with `This GraphQL query is not enabled for this session`, use
+   the REST form in [the proxy reference](../../references/github-proxy.md) — the draft PR is not
+   optional, later steps target it.
+
+7. **Print the summary.**
 
    ```
    Issue:    #{number} — {title}
@@ -85,4 +110,6 @@ steps 1 and 6. Useful for local work on `main`.
 - Use the repo's actual default branch, never a hardcoded `main`.
 - Never `git reset --hard`, never delete a branch. A cloud session works in a disposable clone; if its state is wrong, the answer is a new session, not a destructive fix. Locally, an unexpected branch state is the user's to resolve.
 - Do not install dependencies or write env files. In a cloud session the environment's setup script owns that; locally it is already done.
-- In `--no-branch` mode, do not commit, push, or open a PR.
+- In `--no-branch` mode, do not commit, push, or open a PR. Still claim the issue — it is what tells the next dispatch this one is taken.
+- Never treat a GitHub write as done because it returned success. Where a read-back is specified, run it.
+- On `This GraphQL query is not enabled for this session`, consult [references/github-proxy.md](../../references/github-proxy.md). Never warn past that 403 — take the REST fallback, or stop.
