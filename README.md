@@ -81,6 +81,21 @@ found in the project's own `.claude/agents/`, matched by role rather than filena
 useful reviewer knows the domain (`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). This plugin ships
 no agents; `/finalize-pr` degrades to an inline PR body and a noted gap when a project has none.
 
+**The cloud GitHub proxy only serves some of GraphQL.** All GitHub traffic from a cloud session
+goes through a proxy that keeps the real credential outside the VM, and it serves only a pinned,
+undocumented set of GraphQL operations — rejecting the rest with a 403 no token can fix. Most of
+`gh` is GraphQL underneath, including the read-only `--json` commands. These skills do not try to
+guess which operations are permitted; that list would rot. Instead they use REST unconditionally
+for issue assignment, fall back to REST on the actual 403 everywhere else, and stop outright at the
+one operation with no REST equivalent at all — `gh pr ready`, because `draft` is writable only when
+a PR is created. [references/github-proxy.md](references/github-proxy.md) holds the mapping.
+
+**A GitHub write that returns 2xx is not a GitHub write that happened.** Adding an assignee over
+REST silently ignores users without push access, so `/start-issue` claims its issue and then reads
+the assignment back before creating a branch. That ordering matters more than the retry does: the
+claim is what stops `/dispatch-slices` handing the same slice to a second session, and it is worth
+nothing if it lands after the branch and PR it was meant to protect.
+
 **The human still pulls the merge trigger.** `/finalize-pr` posts `--comment` reviews and never
 `--approve`, so an empty `reviewDecision` is the normal state across a batch — `/merge-pr` and
 `/merge-stack` both treat it as such rather than as a missing gate.

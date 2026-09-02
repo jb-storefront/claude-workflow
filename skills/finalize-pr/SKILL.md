@@ -28,7 +28,18 @@ Issues without these sections still work; sections that are missing are skipped 
 - Find/create the PR:
   - With arg: `gh pr view {number} --json number,title,url,isDraft,headRefName,closingIssuesReferences,mergeStateStatus`. If `headRefName != {branch}`, stop.
   - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, create a draft: `gh pr create --draft --title "{branch}" --body "Work in progress"` and capture the new number/URL.
-- Assign to current user: `{gh_user}` = `gh api user --jq '.login'`; `gh pr edit {pr_number} --add-assignee {gh_user}` (warn-only on failure).
+- Assign to current user: `{gh_user}` = `gh api user --jq '.login'`, then
+
+  ```bash
+  gh api -X POST "repos/{owner}/{repo}/issues/{pr_number}/assignees" -f "assignees[]={gh_user}"
+  gh api "repos/{owner}/{repo}/issues/{pr_number}" --jq '.assignees[].login'
+  ```
+
+  `{owner}` and `{repo}` are **literal** — `gh api` fills them from the current repo. Pull requests
+  are issues, so that is the right endpoint. Not `gh pr edit --add-assignee` — see
+  [the proxy reference](../../references/github-proxy.md). Non-fatal here (the PR already exists,
+  so nothing downstream depends on the assignee), but if the read-back comes back without
+  `{gh_user}`, say so in the §15 summary rather than only in passing.
 - Print a one-line pre-flight summary.
 
 ## 2. Read the slice issue
@@ -40,6 +51,11 @@ For each issue number in `closingIssuesReferences` (usually just one): `gh issue
 - `## References for context` → list of repo-relative file paths
 
 If no issue is linked, skip parsing and note in the eventual review comment that no slice issue was found.
+
+`closingIssuesReferences` is GraphQL-only — GitHub does not expose linked issues over REST. If the
+proxy blocks it, parse the PR body for `Closes|Fixes|Resolves #(\d+)`; `/start-issue` writes
+`Closes #{n}` as its first line for exactly this reason. Note in the §15 summary when the link came
+from the body rather than from GitHub's own linkage, since a hand-edited body could have dropped it.
 
 ## 3. Bootstrap context
 
@@ -175,11 +191,30 @@ Then post the full code-reviewer report as a separate PR comment: `gh pr comment
 
 ## 14. Mark PR ready (conditional)
 
-- Not blocking → `gh pr ready {pr_number}` (warn-only on failure). Then **offer auto-fix**: tell
-  the user they can run `/autofix-pr` on this branch to have Claude watch the PR and respond to
-  CI failures and review comments without anyone reopening the session. Offer it; don't run it —
-  it subscribes to GitHub activity and can push commits and reply to reviewers under the user's
-  account, which is theirs to opt into.
+- Not blocking → `gh pr ready {pr_number}`, then **verify**:
+  `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` must be `false`.
+
+  If it fails with `This GraphQL query is not enabled for this session`, or still reads `true`,
+  **there is no fallback** — `markPullRequestReadyForReview` exists only in GraphQL, and REST
+  cannot write `draft` after creation. Do not warn and move on. Report it as its own outcome:
+
+  ```
+  ⚠ PR #{pr_number} is finished and reviewed but still a draft — the cloud proxy blocks the
+    only API that can clear it, and /merge-pr hard-stops on drafts.
+
+    Clear it from outside the proxy, either way:
+      gh pr ready {pr_number}        (from a local checkout)
+      or the "Ready for review" button at {pr_url}
+  ```
+
+  In §15 this is `Proxy: draft not cleared — needs a human`, with the headline still `Complete`
+  and `Next:` pointing at the manual step. The review work *is* done; re-running `/finalize-pr`
+  would change nothing, so don't report it as a failure that invites one.
+
+  Then **offer auto-fix**: tell the user they can run `/autofix-pr` on this branch to have Claude
+  watch the PR and respond to CI failures and review comments without anyone reopening the
+  session. Offer it; don't run it — it subscribes to GitHub activity and can push commits and
+  reply to reviewers under the user's account, which is theirs to opt into.
 - Blocking → keep draft. Print the fix list locally; do not post additional GitHub noise.
 
 ## 15. Local summary
@@ -205,9 +240,13 @@ Session:  {transcript-url}
 
 Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = no such script in package.json)
 Review:   {Not blocking | Blocking — see above}
+Proxy:    {— | fell back to REST for: {ops} | draft not cleared — needs a human}
 
-Next: {Share PR URL with reviewers | Fix the items above and re-run /finalize-pr}
+Next: {Share PR URL with reviewers | Fix the items above and re-run /finalize-pr | Mark the PR ready, then share it}
 ```
+
+Omit the `Proxy:` line when nothing hit the GraphQL restriction. Never omit it when something did
+— a fallback that ran silently is indistinguishable from a step that never happened.
 
 ## Rules
 
@@ -216,3 +255,5 @@ Next: {Share PR URL with reviewers | Fix the items above and re-run /finalize-pr
 - Re-running is idempotent: gates are stateless, the PR body / review comment / issue body overwrite cleanly.
 - Don't modify source files. The PR-writer agent may modify the PR body; the AI-discipline pass never touches code.
 - If you stop, surface why and what to run next.
+- On `This GraphQL query is not enabled for this session`, consult [references/github-proxy.md](../../references/github-proxy.md) — §8's `gh pr edit --body`, §12's `gh issue edit --body` and `gh issue comment`, and §13's `gh pr review` and `gh pr comment` all have REST equivalents there. Take the fallback, or stop; never warn past it.
+- A GitHub write that returns success is not evidence it took effect. §1 and §14 say what to read back.
