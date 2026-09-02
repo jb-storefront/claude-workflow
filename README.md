@@ -71,6 +71,17 @@ these skills carry no worktree naming, no worktree-pinned branch deletion, and n
 session teardown. A merged PR leaves behind exactly one thing — its remote branch — and
 `--delete-branch` removes it.
 
+**The fan-out step plans; the human launches.** Creating a cloud session is interactive-only —
+`claude --cloud` refuses a non-interactive stdout, because this CLI ignores unknown flags silently
+and a `--cloud` that wasn't honoured would start N *local* sessions while reporting a successful
+cloud fan-out. Every Bash call a skill makes is piped, so `/dispatch-slices` can never run its own
+dispatch. A pty wrapper clears the check honestly but gains nothing: the command attaches you to
+the new session's UI rather than printing an id and exiting, and its first run in a repo opens the
+workspace-trust dialog, which is the human's to answer. So the skill does the part that is actually
+hard — picking the unblocked slices, classifying them AFK or HITL, writing the prompts — and emits
+the commands to run. Steering afterwards *is* automatable: `claude --cloud <session-id> -p "…"`
+attaches rather than creates, and needs no TTY.
+
 **Permissions belong in the repo.** Background worktree sessions needed
 `--dangerously-skip-permissions` because a human could not see their prompts. Cloud sessions read
 the repo's committed `permissions.allow`, so the grant is narrow, reviewable in a PR, and
