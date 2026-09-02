@@ -83,7 +83,7 @@ Otherwise, run `{pm} run test` locally (note: for bun+vitest, this is `bun run t
 ## 8. Dispatch PR Writer agent
 
 Look for a project PR-writer agent in `.claude/agents/`. Match on the agent's **role, not its
-filename** — a project names its agents for its domain (`adk-pr-writer`, `gr4ce-pr-writer`), so
+filename** — a project names its agents for its domain (`ucp-demo-pr-writer`, `gr4ce-pr-writer`), so
 read the frontmatter `name`/`description` of each file and pick the one that writes PR
 descriptions. Use the Agent tool with `subagent_type` set to that frontmatter `name` and
 `prompt: "Write the PR description for PR #{pr_number}."` Wait for completion.
@@ -93,7 +93,7 @@ If there is none: generate a minimal PR body inline — acceptance-criteria chec
 ## 9. Dispatch Code Reviewer agent
 
 Look for a project code-reviewer agent in `.claude/agents/` the same way — by role, not filename
-(`adk-code-reviewer`, `gr4ce-code-reviewer`). If one exists, launch it with sentinel-line gating.
+(`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). If one exists, launch it with sentinel-line gating.
 Prompt:
 
 ```

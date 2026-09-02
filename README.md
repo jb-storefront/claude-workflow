@@ -78,7 +78,7 @@ identical locally and remotely. None of these skills pass the bypass flag.
 
 **Agents stay with their project.** `/finalize-pr` dispatches a PR-writer and a code-reviewer
 found in the project's own `.claude/agents/`, matched by role rather than filename, because a
-useful reviewer knows the domain (`adk-code-reviewer`, `gr4ce-code-reviewer`). This plugin ships
+useful reviewer knows the domain (`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). This plugin ships
 no agents; `/finalize-pr` degrades to an inline PR body and a noted gap when a project has none.
 
 **The human still pulls the merge trigger.** `/finalize-pr` posts `--comment` reviews and never
