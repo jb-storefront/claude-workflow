@@ -28,9 +28,8 @@ claude plugin marketplace add jb-storefront/claude-workflow
 claude plugin install workflow@jb-workflow
 ```
 
-For the skills to be available in **cloud sessions**, declare the plugin in the repo's committed
-`.claude/settings.json` rather than in your user settings — user-scoped `enabledPlugins` do not
-travel to a cloud VM:
+Declare the plugin in the repo's committed `.claude/settings.json` rather than in your user
+settings — user-scoped `enabledPlugins` do not travel to a cloud VM:
 
 ```json
 {
@@ -45,6 +44,25 @@ travel to a cloud VM:
   }
 }
 ```
+
+### That declaration is not enough for cloud sessions
+
+`extraKnownMarketplaces` and `enabledPlugins` apply only **after a human accepts the
+workspace-trust dialog**, and a fresh cloud VM has nobody to accept it. The keys never activate,
+so no marketplace is known and no plugin installs. Committed `.claude/agents/` is *not*
+trust-gated and loads normally, which makes the failure look selective and easy to misread:
+agents present, skills missing.
+
+Install them from the environment's **setup script** instead — it runs as plain bash before
+Claude Code launches, so it sidesteps trust rather than waiting on it:
+
+```bash
+claude plugin marketplace add jb-storefront/claude-workflow
+claude plugin install workflow@jb-workflow
+```
+
+Keep the `.claude/settings.json` block as well; it is what resolves the plugin locally, where a
+human does accept the dialog once.
 
 ## Design notes
 
