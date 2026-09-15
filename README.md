@@ -82,6 +82,11 @@ hard — picking the unblocked slices, classifying them AFK or HITL, writing the
 the commands to run. Steering afterwards *is* automatable: `claude --cloud <session-id> -p "…"`
 attaches rather than creates, and needs no TTY.
 
+The one exception is a **self-hosted runner pool**, where `--environment <ccpool_…>` creates a
+session headlessly and prints its id. A managed environment has no such id, so the exception does
+not apply here, but it is the reason this skill's hand-off is a property of the environment rather
+than a permanent fact about the CLI.
+
 **Permissions belong in the repo.** Background worktree sessions needed
 `--dangerously-skip-permissions` because a human could not see their prompts. Cloud sessions read
 the repo's committed `permissions.allow`, so the grant is narrow, reviewable in a PR, and

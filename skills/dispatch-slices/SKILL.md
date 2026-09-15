@@ -128,10 +128,24 @@ first run in a repo whose `.claude/settings.json` pre-approves permissions opens
 workspace-trust dialog — a security decision belonging to the human, not something to answer
 through a pty.
 
-There is no headless create to fall back on. `--print` is rejected the same way (*"Cloud sessions
-are interactive only"*), and `--bg` / `claude agents` are a different, local backend. The only
-non-interactive cloud invocation the CLI allows is attaching to a session that already exists (§6),
-which is no help before one does.
+There is one headless create, and it is not available to a managed environment. `--environment`
+exempts itself from the TTY check, so `claude -p "<prompt>" --environment <id>` creates a session
+from a piped context and prints `Created cloud session: {id}` — exactly what §6 would want. But the
+flag takes a **self-hosted runner pool** and nothing else:
+
+```
+Error: --environment expects a self-hosted environment id (ccpool_...), got "CC-cloud1"
+```
+
+An Anthropic-managed cloud environment has no `ccpool_` id to pass, so this door is shut for the
+setup this skill is written for. Do not reach for it as a workaround, and do not assume it stays
+shut: if a project ever runs on a self-hosted pool, §5 can dispatch by itself and this whole section
+stops applying.
+
+Nothing else substitutes. `--print` is rejected on the same grounds (*"Starting a new cloud session
+with `--cloud` is interactive only"*), and `--bg` / `claude agents` are a different, local backend.
+Apart from the self-hosted path, the only non-interactive cloud invocation the CLI allows is
+attaching to a session that already exists (§6), which is no help before one does.
 
 Notes that are easy to get wrong when writing the commands:
 
@@ -161,12 +175,13 @@ HITL slices (#62) will stop and wait for your smoke test. Teleport into one to r
 locally, then /finalize-pr from your terminal.
 ```
 
-Both `--cloud` and `--teleport` are hidden from `claude --help`, and this CLI ignores unknown flags
-silently — so absence from the help text is not evidence that a spelling is wrong, in either
-direction. Verified against 2.1.220: `--cloud <session-id>` attaches to an existing session and is
-the one cloud invocation that needs no TTY, because it sends to a session rather than creating one;
+Verified against 2.1.263, where `claude --help` documents both: `--cloud [description|session_id|url]`
+and `--teleport [session]`. `--cloud <session-id>` attaches to an existing session and is the one
+cloud invocation a skill can make unaided, because it sends to a session rather than creating one;
 `--teleport <session-id>` checks the session's branch out locally and errors if run from the wrong
-repo.
+repo. On 2.1.220 neither flag appeared in the help text, so do not read absence from `--help` as
+evidence a spelling is wrong — this CLI ignores unknown flags silently, and it has documented these
+two since.
 
 ## Rules
 
