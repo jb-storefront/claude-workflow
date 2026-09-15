@@ -71,21 +71,25 @@ these skills carry no worktree naming, no worktree-pinned branch deletion, and n
 session teardown. A merged PR leaves behind exactly one thing — its remote branch — and
 `--delete-branch` removes it.
 
-**The fan-out step plans; the human launches.** Creating a cloud session is interactive-only —
-`claude --cloud` refuses a non-interactive stdout, because this CLI ignores unknown flags silently
-and a `--cloud` that wasn't honoured would start N *local* sessions while reporting a successful
-cloud fan-out. Every Bash call a skill makes is piped, so `/dispatch-slices` can never run its own
-dispatch. A pty wrapper clears the check honestly but gains nothing: the command attaches you to
-the new session's UI rather than printing an id and exiting, and its first run in a repo opens the
-workspace-trust dialog, which is the human's to answer. So the skill does the part that is actually
-hard — picking the unblocked slices, classifying them AFK or HITL, writing the prompts — and emits
-the commands to run. Steering afterwards *is* automatable: `claude --cloud <session-id> -p "…"`
-attaches rather than creates, and needs no TTY.
+**The fan-out step dispatches under a pty.** Creating a cloud session needs a TTY, and every Bash
+call a skill makes is piped, so `/dispatch-slices` wraps each dispatch in `script -q /dev/null`.
+That is not a bypass. The check exists because this CLI ignores unknown flags silently, so a
+`--cloud` that wasn't honoured would start N *local* sessions while reporting a cloud fan-out;
+`script` gives the process a real controlling terminal, so the flag is honoured for real, and the
+proof comes back in the output as a genuine cloud session id. The command creates, prints
+`Created cloud session:` with the id and its URL, and returns, which is what lets the skill capture
+ids and report them.
 
-The one exception is a **self-hosted runner pool**, where `--environment <ccpool_…>` creates a
-session headlessly and prints its id. A managed environment has no such id, so the exception does
-not apply here, but it is the reason this skill's hand-off is a property of the environment rather
-than a permanent fact about the CLI.
+Two things the pty does not buy. It cannot answer the workspace-trust dialog that the first
+`--cloud` opens in a repo whose committed settings pre-approve permissions — that is the human's,
+and a stalled dispatch is handed back. And it is unnecessary on a **self-hosted runner pool**, where
+`--environment <ccpool_…>` creates a session headlessly; a managed environment has no such id, so
+the pty is the path there.
+
+This has already changed once: on 2.1.220 the same command attached to an interactive UI instead of
+printing an id, which made an automated fan-out impossible and is why an earlier version of the
+skill only planned. Verified against 2.1.263. Re-verify on a much later build rather than trusting
+the note.
 
 **Permissions belong in the repo.** Background worktree sessions needed
 `--dangerously-skip-permissions` because a human could not see their prompts. Cloud sessions read
