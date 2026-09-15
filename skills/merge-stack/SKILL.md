@@ -1,6 +1,6 @@
 ---
 name: merge-stack
-description: Squash-merge a SET of in-flight PRs in the correct order, handling stacked PRs and cross-PR conflicts. Auto-derives the order (stacking from base refs, overlap from changed files), confirms once, then runs unattended — pausing only on conflict, CI failure, or unexpected state. Use when the user says "/merge-stack", "merge these PRs", "merge the stack", or "land these PRs in order".
+description: Squash-merge a SET of in-flight PRs in the correct order, handling stacked PRs, cross-PR conflicts, and the worktrees their sessions still hold. Auto-derives the order (stacking from base refs, overlap from changed files), confirms once, then runs unattended — pausing only on conflict, CI failure, or unexpected state. Use when the user says "/merge-stack", "merge these PRs", "merge the stack", or "land these PRs in order".
 ---
 
 # Merge Stack
@@ -13,7 +13,12 @@ This is the capstone of the `/grill-with-docs` → `/to-spec` → `/to-tickets` 
 merge to a human, and this skill performs it for a whole batch at once.
 
 It reuses `/merge-pr`'s readiness gates (review / CI / merge-state) per PR and owns what a
-single-PR merge has no concept of: ordering, stacked-PR retarget/rebase, and cross-PR conflicts.
+single-PR merge has no concept of: ordering, stacked-PR retarget/rebase, cross-PR conflicts, and
+the worktrees the slice sessions are still holding.
+
+**Run this from the main checkout**, never from inside a slice's worktree. Claude Code blocks a
+session in a worktree from running git in the main checkout, and this skill does almost nothing
+else.
 
 ## Concepts (why a batch needs more than N single merges)
 
@@ -25,15 +30,24 @@ single-PR merge has no concept of: ordering, stacked-PR retarget/rebase, and cro
 4. **Squash-merge rebasing** — after a base PR is *squash*-merged, a plain `git rebase
    origin/{default}` tries to replay the base's commits too. The dependent must be replayed with
    `--onto` from the base's pre-merge tip.
-5. **Branch-deletion ordering trap** — deleting a base branch while a dependent PR still points
-   at it can **close** that PR instead of retargeting it. Retarget dependents first.
-6. **Review policy once** — `/finalize-pr` posts `--comment` reviews and never `--approve`, so
-   empty `reviewDecision` is the *expected, normal* state across the whole batch, not a blocker.
-7. **An explicit do-NOT-merge exclusion** (e.g. a CI regression-guard issue held until others land).
+5. **A worktree pins its branch.** Every slice was built in `.claude/worktrees/issue-{n}`, and git
+   allows one checkout per branch. From the main checkout both of these fail outright:
 
-Slices are built in cloud sessions, so there are no local worktrees or background sessions to
-tear down. A merged PR leaves behind only its remote branch, which `--delete-branch` removes as
-part of the merge.
+   ```
+   $ git switch {branch}
+   fatal: '{branch}' is already used by worktree at '…/.claude/worktrees/issue-{n}'
+   $ git branch -D {branch}
+   error: cannot delete branch '{branch}' used by worktree at '…/.claude/worktrees/issue-{n}'
+   ```
+
+   Claude Code also holds a `git worktree lock` while the session runs, so `git worktree remove`
+   refuses until the session stops. Rebase **inside** the worktree; remove the worktree **before**
+   deleting the branch.
+6. **Branch-deletion ordering trap** — deleting a base branch while a dependent PR still points
+   at it can **close** that PR instead of retargeting it. Retarget dependents first.
+7. **Review policy once** — `/finalize-pr` posts `--comment` reviews and never `--approve`, so
+   empty `reviewDecision` is the *expected, normal* state across the whole batch, not a blocker.
+8. **An explicit do-NOT-merge exclusion** (e.g. a CI regression-guard issue held until others land).
 
 ## Input
 
@@ -48,7 +62,7 @@ Optional flags:
 ## 1. Collect & validate
 
 - `{default}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`.
-- `git status --porcelain` — if non-empty, **stop**. §4.3 checks branches out in this checkout;
+- `git status --porcelain` — if non-empty, **stop**. §4.3 may check a branch out in this checkout;
   a dirty tree would block that or lose work.
 - Note the current branch as `{return_branch}` so §6 can put the checkout back.
 - Resolve the PR set (explicit list, or `--all-ready` via `gh pr list --state open --base {default} --json number --jq '.[].number'`). Drop the `--exclude` set.
@@ -65,6 +79,10 @@ Optional flags:
 - **Snapshot base tips.** `git fetch origin --prune`, then for each PR record
   `git rev-parse origin/{headRefName}` as `{tip[pr]}`. Concept 4's `--onto` rebase and §5's
   recovery both need a base's pre-merge tip *after* its branch is gone.
+- **Snapshot worktrees.** `git worktree list --porcelain` → a `{branch → worktree path}` map, and
+  `claude agents --json` → a `{cwd → id, state}` map. Together they say, per PR, whether its branch
+  is pinned and whether a session is still running in it. Everything in §4.3 and §4.5 depends on
+  this map, and it is cheaper to take once than to re-derive per PR.
 
 ## 2. Build the order
 
@@ -85,24 +103,29 @@ detected, not assumed.
 ## 3. Present the plan & confirm once
 
 Print the ordered plan and **ask once**. After approval, run unattended — pause only on a §4/§5
-trigger (non-mechanical conflict, CI failure, unexpected PR state).
+trigger (non-mechanical conflict, CI failure, unexpected PR state, a worktree holding work).
 
 ```
 /merge-stack — Plan ({N} PRs → {default})
 
 Order:
-  1. #69  feat/61…  base:main  CI:✓  review:none   (independent)
-  2. #70  feat/62…  base:main  CI:✓  review:none   (independent)
+  1. #69  feat/61…  base:main  CI:✓  review:none   worktree: issue-61 (done)      (independent)
+  2. #70  feat/62…  base:main  CI:✓  review:none   worktree: —                    (independent)
   …
-  k. #74  feat/65…  base:#73   CI:?  review:none   (STACKED on #73; overlaps #71 on SettingsPage.tsx)
+  k. #74  feat/65…  base:#73   CI:?  review:none   worktree: issue-65 (working)   (STACKED on #73; overlaps #71 on SettingsPage.tsx)
 
 Stacked:  #74 → #73
 Overlaps: #74 ↔ #71  (src/features/settings/SettingsPage.tsx — later one rebases)
 Blocked:  #80 (draft), #67 (excluded — CI regression guard)
+Sessions: 2 still running — they will be stopped before their PRs merge.
 
-Action: squash-merge each in order; retarget/rebase stacked PRs; delete branches.
+Action: squash-merge each in order; retarget/rebase stacked PRs; stop sessions, remove worktrees, delete branches.
 Proceed? (one confirmation; then unattended)
 ```
+
+A session still `working` on a PR you are about to merge is worth naming here rather than
+discovering in §4.5 — it usually means the PR was finalized and the session simply never exited,
+but it can also mean someone is still pushing to it.
 
 ## 4. Execute loop (per PR, in order)
 
@@ -113,36 +136,73 @@ For each PR in the order:
 2. **Retarget if its base has landed** — if the recorded base was another PR's branch that is
    now merged: `gh pr edit {pr} --base {default}`.
 3. **Bring up to date if `BEHIND`/`DIRTY`** — rebase with mechanical-only discipline (see
-   `/rebase-pr`), in this checkout:
+   `/rebase-pr`). **Where you rebase depends on the §1 worktree map:**
 
-   ```
-   git fetch origin --prune
-   git switch -C {branch} origin/{branch}
-   ```
+   - **Branch has a worktree** (`{wt}`) — rebase there. The branch is pinned to it, so a checkout
+     in the main checkout would fail outright:
 
-   Then replay:
-   - Normal case: `git rebase origin/{default}`.
+     ```
+     git -C {wt} fetch origin --prune
+     git -C {wt} rebase origin/{default}
+     ```
+
+     If the worktree is dirty (`git -C {wt} status --porcelain` non-empty), **pause**: a rebase
+     would refuse anyway, and uncommitted work in a slice's tree is something a human should look
+     at before it is lost.
+
+   - **No worktree** — as before, in this checkout:
+
+     ```
+     git fetch origin --prune
+     git switch -C {branch} origin/{branch}
+     git rebase origin/{default}
+     ```
+
+   Then, in whichever tree:
+   - Normal case: `rebase origin/{default}`.
    - **When this PR's base PR was squash-merged** (concept 4): replay only this PR's own commits
-     with `git rebase --onto origin/{default} {tip[base_pr]} {branch}`, using the §1 snapshot.
+     with `rebase --onto origin/{default} {tip[base_pr]} {branch}`, using the §1 snapshot.
 
    Resolve only mechanical conflicts (non-overlapping / superset / independent sections). For a
    flagged **overlap** (e.g. one PR changed a heading `text-[18px]`→`text-lg`, the other the box
    `border-gray-200`→`border-border`) the resolution is usually **keep both** — but treat it as a
    **pause point**: resolve deliberately per the overlap note, stage the specific files, run
-   `lint` / `typecheck` / `format:check`, then `git push --force-with-lease`.
+   `lint` / `typecheck` / `format:check`, then `push --force-with-lease`.
 
-   Truly semantic conflict you can't resolve mechanically → `git rebase --abort`, **pause**, report.
+   Truly semantic conflict you can't resolve mechanically → `rebase --abort`, **pause**, report.
 4. **Wait for CI** if step 3 pushed a new commit (the push re-fires checks): poll
    `gh pr checks {pr}` until the required check is `pass`/`fail`. `fail` → **pause** and report.
-5. **Retarget dependents, then merge.**
+5. **Retarget dependents, release the branch, then merge.**
    - **Before merging,** point any not-yet-merged dependent still based on this branch at the
      default: `gh pr edit {dep} --base {default}`. This is what prevents §5's auto-close trap;
      do it even though GitHub usually retargets on its own, because "usually" is what burned this
      workflow before.
+   - **Release the branch.** If the §1 map gave this branch a worktree:
+     - session still running → `claude stop {id}` (its transcript is kept).
+     - then `claude rm {id}`, which removes the session and its worktree.
+     `claude rm` has **two** refusals, and only one of them offers an override. Verified on 2.1.263:
+
+     ```
+     kept {id} — worktree has uncommitted changes
+       worktree kept at {wt}
+       resolve that (commit/push, or remove the worktree), then run 'claude rm {id}' again
+
+     kept {id} — 1 unpushed commit on {branch} ({short-sha} {subject})
+       worktree: {wt}
+       push it, or discard the worktree and its commits: claude rm {id} --discard-unpushed {sha}@{worktree-id}
+     ```
+
+     Either way it **pauses**: report what is there and hand over the command it printed. Do not
+     run `--discard-unpushed` and do not `git worktree remove --force`. By this point the PR is
+     merged, so nothing is blocked by a worktree left on disk, and only the human can tell whether
+     that commit is a stray or the one thing that never got pushed.
+     - no session id for the worktree (a session already reaped) → `git worktree remove {wt}`, and
+       `git worktree remove --force {wt}` only when `status --porcelain` in it is empty and git is
+       refusing for some other reason.
    - `git switch {default}` — never merge a branch that is currently checked out here.
    - `gh pr merge {pr} --squash --delete-branch`
    - Verify: `gh pr view {pr} --json state --jq '.state'` == `MERGED`.
-6. Record: merged ✓, closing issues, branch deleted.
+6. Record: merged ✓, closing issues, branch deleted, worktree removed.
 
 ## 5. Pause / recovery playbook
 
@@ -154,27 +214,35 @@ For each PR in the order:
   (§4.5's retarget-before-merge is designed to avoid ever needing this.)
 - **CI failure after rebase** — pause, surface the failing job URL; let the human decide.
 - **Non-mechanical conflict** — abort the rebase, pause, report the files. Never guess a semantic merge.
+- **`claude rm` kept the worktree** — pause. It says which of the two reasons applies. Report the
+  worktree path, what `git -C {wt} status --porcelain` and `git -C {wt} log --oneline @{u}..` show,
+  and the exact command the refusal printed, if it printed one. The human decides; this skill never
+  discards work.
+- **`git worktree remove` says the worktree is locked** — a session is still running in it, or was
+  killed and left its lock. `claude stop {id}` first; a lock left by a killed session is released by
+  Claude Code's own periodic sweep, and `git worktree unlock {wt}` forces it now.
 
 ## 6. Cleanup
 
 - `git switch {return_branch}`; if that was a merged slice branch, `git switch {default}` instead.
 - `git fetch origin --prune` — drops the remote-tracking refs for branches deleted in §4.5.
-- Delete any local branches left from a §4.3 rebase checkout: for each merged `{headRef}`,
-  `git branch -D {headRef}` if it exists. `-D` is required, not a fallback — a squash merge
-  rewrites the commits, so `-d` always refuses.
-- If `{default}` is checked out, `git pull origin {default}` to pick up the merges.
-- **Verify:** per batch `{headRef}`, `git ls-remote --heads origin {headRef}` returns nothing.
-  Report anything left as a stray needing manual attention.
+- Any worktree left for a merged branch: remove it as §4.5 does. Then delete the local branch —
+  `git branch -D {headRef}` if it still exists. `-D` is required, not a fallback: a squash merge
+  rewrites the commits, so `-d` always refuses. A `-D` that fails with *"used by worktree at"* means
+  a worktree survived; go back and remove it rather than forcing anything.
+- **Verify both:** per batch `{headRef}`, `git ls-remote --heads origin {headRef}` returns nothing,
+  and `git worktree list` shows only the main checkout. Report anything left as a stray needing
+  manual attention, and re-run `claude agents --json` to confirm no slice session is still alive.
 
 ## 7. Summary
 
 ```
 /merge-stack — Complete ({M}/{N} merged)
 
-#69  feat/61…  MERGED   issues: #61 closed   branch deleted
-#70  feat/62…  MERGED   issues: #62 closed   branch deleted
+#69  feat/61…  MERGED   issues: #61 closed   branch deleted   worktree removed
+#70  feat/62…  MERGED   issues: #62 closed   branch deleted   worktree —
 …
-#74  feat/65…  MERGED   (rebased --onto)     issues: #65 closed   branch deleted
+#74  feat/65…  MERGED   (rebased --onto)     issues: #65 closed   branch deleted   worktree removed
 
 Blocked/excluded: #80 (draft), #67 (excluded)
 Strays:           none
@@ -182,11 +250,13 @@ Strays:           none
 
 ## Rules
 
+- Run from the main checkout, never from inside a slice's worktree.
 - Squash merge only. Never merge commits or rebase merges. Never `--admin`. Never retry a failed merge.
 - Never `git push --force` — always `--force-with-lease`.
 - Stage specific files when resolving a conflict; never `git add -A`.
 - **Retarget dependents *before* merging a base** (avoids the auto-close trap).
-- Never merge a branch that is currently checked out in this repo — switch to `{default}` first.
-- One upfront confirmation (§3); then run unattended, pausing only on conflict / CI failure / unexpected PR state.
+- **Remove a branch's worktree before deleting the branch**, and stop its session before removing the worktree.
+- Never discard a worktree's uncommitted changes or unpushed commits. `--discard-unpushed` and `git worktree remove --force` are the human's to run, and this skill only ever reports the command.
+- Never merge a branch that is currently checked out here — switch to `{default}` first.
+- One upfront confirmation (§3); then run unattended, pausing only on conflict / CI failure / unexpected PR state / a worktree holding work.
 - Respect the `--exclude` set; never merge it.
-- This skill expects a local checkout holding every branch in the batch, so it normally runs outside the cloud proxy. Run inside a cloud session, §4's `gh pr edit --base`, `gh pr merge`, and §5's `gh pr reopen` are all GraphQL mutations that can 403 with `This GraphQL query is not enabled for this session` — take the REST fallbacks in [references/github-proxy.md](../../references/github-proxy.md) rather than pausing the batch, and record which ones you used in §7.

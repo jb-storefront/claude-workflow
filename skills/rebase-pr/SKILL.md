@@ -11,6 +11,18 @@ Rebase the current feature branch onto the latest default branch and push.
 
 `$ARGUMENTS`: a PR number (`42` or `#42`). If empty, detect the PR from the current branch.
 
+## 0. Where to run it
+
+A slice branch is checked out in its own worktree (`.claude/worktrees/issue-{n}`), and git allows
+one checkout per branch — so a rebase of that branch must happen **inside** that worktree. Run
+`git worktree list --porcelain`: if `{branch}` has a worktree and you are not in it, either work
+there (`git -C {wt} …` for every git command below) or tell the user to attach to that session. In
+the main checkout `git switch {branch}` simply fails: *"fatal: '{branch}' is already used by
+worktree at …"*.
+
+To review someone else's PR without disturbing your own checkout, `claude --worktree "#{pr}"`
+creates a worktree at `.claude/worktrees/pr-{pr}` on that PR's head commit.
+
 ## 1. Pre-flight
 
 - `git status --porcelain` — if non-empty, **stop**: uncommitted changes must be committed or stashed first.
@@ -74,3 +86,4 @@ Next: /finalize-pr to validate the rebased code.
 - Never continue a rebase with unresolvable conflicts — abort and leave the branch unchanged.
 - Never run quality checks or modify PR metadata; that's `/finalize-pr`'s job.
 - Idempotent — safe to re-run; if already up to date, prints the no-op summary.
+- Rebase a branch in the worktree that holds it. Never try to check it out a second time.
