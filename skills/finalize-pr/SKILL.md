@@ -67,17 +67,43 @@ Read each file listed in `## References for context` (e.g., `CONTEXT.md`, area `
 
 ## 5. Quality gates
 
-Auto-detect package manager from lockfile: `bun.lockb` → `bun`, `pnpm-lock.yaml` → `pnpm`, `package-lock.json` → `npm`, `yarn.lock` → `yarn`. If no lockfile, skip this step.
+Auto-detect the **toolchain** from a lockfile at the repo root, first match wins:
 
-Run, in order, **only the scripts that exist in `package.json`** (read the `scripts` field and check first):
+| Lockfile | Toolchain | Manifest that declares the gates |
+| --- | --- | --- |
+| `bun.lockb` | `bun` | `package.json` |
+| `pnpm-lock.yaml` | `pnpm` | `package.json` |
+| `package-lock.json` | `npm` | `package.json` |
+| `yarn.lock` | `yarn` | `package.json` |
+| `uv.lock` | `uv` | `pyproject.toml` |
+
+A project declares its gates; this skill does not invent them. Run a gate only when the manifest
+configures its tool, and report the rest as skipped.
+
+**Node toolchains** — run, in order, **only the scripts that exist in `package.json`** (read the
+`scripts` field and check first):
 
 - `{pm} run lint`
 - typecheck — accept **either** spelling: `type-check` or `typecheck`, whichever the repo defines.
 - `{pm} run format:check`
 
-Report each gate as run, skipped, or failed. A gate that is skipped because no script matched
-must say so in the §15 summary — a silently-absent typecheck reads as a passing typecheck, which
-is how this gate went unnoticed for an entire project.
+**`uv`** — read `pyproject.toml` and run, in order, only what it configures:
+
+- `[tool.ruff]` → `uv run ruff check .`
+- `[tool.mypy]` → `uv run mypy`
+- `[tool.ruff]` → `uv run ruff format --check .`
+
+`[tool.ruff]` gates both ruff commands: a project that configures ruff at all gets lint and format,
+because they are one tool reading one config. `[tool.ruff.lint]` implies `[tool.ruff]`.
+
+Report each gate as run, skipped, or failed. A gate that is skipped because the manifest does not
+configure it must say so in the §15 summary — a silently-absent typecheck reads as a passing
+typecheck, which is how this gate went unnoticed for an entire project.
+
+**No lockfile matched the table.** Do not skip quietly. A toolchain this skill was never taught is
+a gap in the skill, and it looks identical to a clean gate run unless it is named. Record it and
+surface it in §15 as `Gates: not run — unrecognised toolchain ({what was found at the root})`, then
+proceed: §6 still has CI, which is where the gates actually run for a project like this.
 
 Any failure → **stop** with the error output. Re-running after fixes is idempotent.
 
@@ -90,7 +116,13 @@ If `.github/workflows/` exists with at least one workflow file that runs tests:
 - Any `PENDING`/`QUEUED` → warn and ask: wait, proceed, or abort?
 - Any `FAILURE`/`ERROR` → **stop**.
 
-Otherwise, run `{pm} run test` locally (note: for bun+vitest, this is `bun run test`, not `bun test`). Skip silently if no `test` script exists. Failure → **stop**.
+Otherwise, run the test gate locally for the toolchain §5 detected:
+
+- Node → `{pm} run test` (note: for bun+vitest, this is `bun run test`, not `bun test`). Skip silently if no `test` script exists.
+- `uv` → `uv run pytest -q`, when `pyproject.toml` has `[tool.pytest.ini_options]`. Skip silently otherwise.
+- No toolchain detected → report `test —` and say why in §15, the same as §5.
+
+Failure → **stop**.
 
 ## 7. Push
 
@@ -238,7 +270,7 @@ Branch:   {branch}
 Issue:    #{issue_number} ({N}/{M} acceptance criteria verified)
 Session:  {transcript-url}
 
-Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = no such script in package.json)
+Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = the project does not configure it)
 Review:   {Not blocking | Blocking — see above}
 Proxy:    {— | fell back to REST for: {ops} | draft not cleared — needs a human}
 
@@ -255,5 +287,6 @@ Omit the `Proxy:` line when nothing hit the GraphQL restriction. Never omit it w
 - Re-running is idempotent: gates are stateless, the PR body / review comment / issue body overwrite cleanly.
 - Don't modify source files. The PR-writer agent may modify the PR body; the AI-discipline pass never touches code.
 - If you stop, surface why and what to run next.
+- A gate that did not run is never reported as a gate that passed. Whether it was the tool the project does not configure or the toolchain this skill does not know, §15 names it.
 - On `This GraphQL query is not enabled for this session`, consult [references/github-proxy.md](../../references/github-proxy.md) — §8's `gh pr edit --body`, §12's `gh issue edit --body` and `gh issue comment`, and §13's `gh pr review` and `gh pr comment` all have REST equivalents there. Take the fallback, or stop; never warn past it.
 - A GitHub write that returns success is not evidence it took effect. §1 and §14 say what to read back.
