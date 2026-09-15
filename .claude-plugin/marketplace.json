@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "workflow",
-      "description": "Spec-to-merge loop for GitHub-tracked vertical slices, run in Claude Code cloud sessions",
+      "description": "Spec-to-merge loop for GitHub-tracked vertical slices, each in its own git worktree",
       "source": "./"
     }
   ]

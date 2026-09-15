@@ -1,11 +1,11 @@
 ---
 name: merge-pr
-description: Squash-merge an approved PR, delete the branch, and clean up. Hard-gates on review approval; soft-gates on CI; warns on BEHIND/DIRTY merge state and recommends /rebase-pr. Use when the user says "/merge-pr", "merge this PR", or wants to land an approved PR.
+description: Squash-merge an approved PR, tear down its worktree and session, and delete the branch. Hard-gates on review approval; soft-gates on CI; warns on BEHIND/DIRTY merge state and recommends /rebase-pr. Use when the user says "/merge-pr", "merge this PR", or wants to land an approved PR.
 ---
 
 # Merge PR
 
-Squash-merge an approved PR and delete its branch. For a *set* of finished PRs, use
+Squash-merge an approved PR, then clean up what built it. For a *set* of finished PRs, use
 `/merge-stack`, which owns ordering and cross-PR conflicts; this skill handles one.
 
 ## Input
@@ -21,12 +21,10 @@ Squash-merge an approved PR and delete its branch. For a *set* of finished PRs, 
   - With arg: `gh pr view {number} --json number,title,url,state,isDraft,headRefName,reviewDecision,statusCheckRollup,closingIssuesReferences`
   - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, stop.
 - Validate state: `MERGED` → stop (no-op); `CLOSED` → stop; `isDraft=true` → **stop** ("Mark it ready with `gh pr ready {number}` first.").
-
-  A PR that `/finalize-pr` finished in a cloud session can be stuck as a draft through no fault of
-  its own — the proxy blocks the only API that clears the flag, and nothing inside a cloud session
-  can do it. If `/finalize-pr` reported that, say so here instead of implying the work is
-  unfinished, and point at the same two manual outs: `gh pr ready {number}` from a local checkout,
-  or the **Ready for review** button.
+- **Locate the branch's worktree.** `git worktree list --porcelain` → `{wt}` for `{headRefName}`,
+  and `claude agents --json` → the session `id` and `state` whose `cwd` is `{wt}`. A slice built by
+  `/dispatch-slices` has both; a PR written by hand has neither. §5 needs them, and it is worth
+  knowing before the merge whether a session is still running against this branch.
 
 ## 2. Merge readiness
 
@@ -60,13 +58,14 @@ Stop if the user declines.
 ```
 /merge-pr — Pre-merge
 
-PR:      #{pr_number} — {pr_title}
-URL:     {pr_url}
-Branch:  {head_ref}
-Review:  {review_decision or "No reviews configured"}
-CI:      {All passed | Failing | Pending}
-Issues:  {linked_issues or "none"}
-Action:  Squash merge → {default_branch}, delete branch
+PR:       #{pr_number} — {pr_title}
+URL:      {pr_url}
+Branch:   {head_ref}
+Worktree: {wt or "none"}  {session id and state, if any}
+Review:   {review_decision or "No reviews configured"}
+CI:       {All passed | Failing | Pending}
+Issues:   {linked_issues or "none"}
+Action:   Squash merge → {default_branch}, stop session, remove worktree, delete branch
 ```
 
 ## 4. Squash merge
@@ -75,29 +74,53 @@ Action:  Squash merge → {default_branch}, delete branch
 
 On failure: stop and report. Never retry automatically. Never `--admin`.
 
-The one exception to "stop and report" is `This GraphQL query is not enabled for this session`,
-which says nothing about whether the merge should happen — it is the cloud proxy refusing the
-transport. Use the REST form from [the proxy reference](../../references/github-proxy.md)
-(`PUT …/pulls/{n}/merge` plus `DELETE …/git/refs/heads/{branch}`; `--delete-branch` is already
-REST and would have succeeded on its own), note the fallback in §6, and carry on.
+## 5. Teardown (each step non-fatal — warn on failure, except where it says pause)
 
-## 5. Local catch-up (each step non-fatal — warn on failure)
+A slice branch is pinned to its worktree: `git branch -D` fails with *"cannot delete branch … used
+by worktree at …"* until the worktree is gone, and `git worktree remove` refuses while Claude Code
+holds its lock for a running session. So the order is fixed — stop, remove, delete:
 
-The work was built in a cloud session, so there is usually nothing checked out locally for this
-branch. Sync the local view and remove the branch only if it happens to exist here:
+- **Stop the session** if `claude agents --json` still shows it running: `claude stop {id}`. Its
+  transcript is kept and `claude attach {id}` still opens it.
+- **Remove the session and its worktree**: `claude rm {id}`.
 
-- `git fetch origin {default_branch} --prune`; if currently on `{default_branch}`, also `git pull origin {default_branch}`.
-- If `{head_ref}` exists locally (`git branch --list {head_ref}`) and is not checked out: `git branch -D {head_ref}`. `-D` rather than `-d` is required — a squash merge rewrites the commits, so `-d` always refuses.
-- If `{head_ref}` *is* the current branch, `git switch {default_branch}` first, then delete.
+  It keeps the worktree instead of removing it in two cases, and only one offers an override.
+  Verified on 2.1.263:
+
+  ```
+  kept {id} — worktree has uncommitted changes
+    worktree kept at {wt}
+    resolve that (commit/push, or remove the worktree), then run 'claude rm {id}' again
+
+  kept {id} — 1 unpushed commit on {branch} ({short-sha} {subject})
+    worktree: {wt}
+    push it, or discard the worktree and its commits: claude rm {id} --discard-unpushed {sha}@{worktree-id}
+  ```
+
+  **Do not run either fix.** Show the user what is there — `git -C {wt} status --porcelain` and
+  `git -C {wt} log --oneline @{u}..` — and hand over the command the refusal printed. The PR is
+  already merged at this point, so nothing is blocked by leaving the worktree in place; discarding
+  someone's work to tidy up is not a trade this skill gets to make.
+
+  If the worktree exists but no session owns it any more, `git worktree remove {wt}` does the same
+  job. If git says it is locked, the session that held it was killed; Claude Code's periodic sweep
+  releases such locks, and `git worktree unlock {wt}` forces it now.
+- **Sync the local view**: `git fetch origin {default_branch} --prune`; if currently on
+  `{default_branch}`, also `git pull origin {default_branch}`.
+- **Delete the local branch** if it exists (`git branch --list {head_ref}`) and is not checked out:
+  `git branch -D {head_ref}`. `-D` rather than `-d` is required — a squash merge rewrites the
+  commits, so `-d` always refuses. If `{head_ref}` *is* the current branch, `git switch
+  {default_branch}` first.
 
 ## 6. Summary
 
 ```
 /merge-pr — Complete
 
-PR:     #{pr_number} — {pr_title}  [MERGED]
-Branch: {head_ref}  [DELETED on remote{, and locally}]
-Issues: {linked_issues or "none"}  [CLOSED]
+PR:       #{pr_number} — {pr_title}  [MERGED]
+Branch:   {head_ref}  [DELETED on remote{, and locally}]
+Worktree: {removed | kept — holds unpushed work, see above | none}
+Issues:   {linked_issues or "none"}  [CLOSED]
 ```
 
 ## Rules
@@ -106,5 +129,5 @@ Issues: {linked_issues or "none"}  [CLOSED]
 - Never `--admin`. Never retry a failed merge.
 - Always confirm in step 3.
 - Empty `reviewDecision` is normal here, not a blocker — `/finalize-pr` deliberately never approves.
-- `closingIssuesReferences` is GraphQL-only. If the proxy blocks it, parse `Closes|Fixes|Resolves #(\d+)` from the PR body and say the linkage came from there.
-- On `This GraphQL query is not enabled for this session`, consult [references/github-proxy.md](../../references/github-proxy.md). Take the REST fallback, or stop; never warn past it.
+- Stop the session before removing its worktree, and remove the worktree before deleting the branch.
+- Never discard a worktree's uncommitted changes or unpushed commits. `--discard-unpushed` and `git worktree remove --force` are the human's to run; report the command, don't run it.

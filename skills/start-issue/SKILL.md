@@ -1,16 +1,18 @@
 ---
 name: start-issue
-description: Begin work on a GitHub issue — create the branch, open a draft PR, and assign the issue. Pass --no-branch to work directly on the default branch. Use when the user says "/start-issue <number>", "start issue 42", or when a dispatched cloud session begins a slice.
+description: Begin work on a GitHub issue — claim it, name the branch, open a draft PR, and set up the worktree's environment. Pass --no-branch to work directly on the default branch. Use when the user says "/start-issue <number>", "start issue 42", or when a dispatched background session begins a slice.
 ---
 
 # Start Issue
 
-Put a slice issue into a workable state: a named branch, a draft PR to collect the work, and the
-issue assigned so `/dispatch-slices` won't hand it to a second session.
+Put a slice issue into a workable state: the issue claimed, a named branch, a draft PR to collect
+the work, and a worktree with its dependencies installed.
 
-Normally this runs as the first act of a cloud session dispatched by `/dispatch-slices`. The VM
-is already a fresh clone at the base branch with dependencies installed by the environment's
-setup script, so there is nothing to reset and nothing to install.
+Normally this runs as the first act of a background session dispatched by `/dispatch-slices`. That
+session starts in `.claude/worktrees/issue-{n}`, on a branch named `worktree-issue-{n}` cut from the
+remote default branch. A worktree is a **fresh checkout**: it shares the repository's history and
+remote, and nothing else. No dependencies are installed, and no gitignored file is present unless a
+`.worktreeinclude` copied it in.
 
 ## Input
 
@@ -22,7 +24,7 @@ If the issue number is missing or invalid, run `gh issue list --state open --lim
 the user to pick.
 
 **`--no-branch` mode**: skip all branch/PR work and operate on the default branch. Run only
-steps 1, 2, and 7. Useful for local work on `main`.
+steps 1, 2, and 8. Useful for local work on `main`.
 
 ## Steps
 
@@ -40,11 +42,11 @@ steps 1, 2, and 7. Useful for local work on `main`.
    `{owner}` and `{repo}` are **literal** — `gh api` fills them from the current repo. `{login}` =
    `gh api user --jq '.login'`. If the read-back doesn't list `{login}`, **stop** —
    the issue is unclaimed, so a second session can still take it, and everything after this step
-   would be work done twice. A 2xx on the POST is not enough: GitHub silently ignores assignees
-   who lack push access.
+   would be work done twice.
 
-   Do not use `gh issue edit --add-assignee`; it is a GraphQL mutation that fails behind the cloud
-   proxy. See [the proxy reference](../../references/github-proxy.md).
+   A 2xx on the POST is not enough. GitHub's documented contract is that assignees for users
+   without push access are [silently ignored](https://docs.github.com/en/rest/issues/assignees):
+   no error, empty result. A caller who trusts the status code reports a claim it never made.
 
    Claiming first is the point. The branch and the draft PR are also de-duplication signals —
    `/dispatch-slices` §2 drops anything with an open PR — but they arrive several steps later, and
@@ -57,11 +59,19 @@ steps 1, 2, and 7. Useful for local work on `main`.
    Branch is `{prefix}/{number}-{slug}`. Slug: lowercase, non-alphanumeric → hyphens, collapse
    repeats, trim, truncate ≤50 chars without cutting mid-word, strip trailing hyphens.
 
-4. **Create the branch.** `git checkout -b {branch}`
+4. **Put the checkout on that branch.** Which command depends on where you are:
 
-   Nothing to reset: the clone is fresh and at the base branch the dispatcher chose. If the
-   branch name already exists — only possible when re-running in the same session — reuse it and
-   skip to step 6.
+   - `git branch --show-current` starts with `worktree-` → **rename in place**:
+     `git branch -m {prefix}/{number}-{slug}`. The worktree already has its own branch, cut from
+     the right base and checked out here; renaming it leaves one branch where a second `checkout -b`
+     would leave a stray `worktree-issue-{n}` behind for `/merge-stack` to clean up.
+   - Otherwise (a plain local run) → `git checkout -b {prefix}/{number}-{slug}`.
+
+   If the target branch name already exists — only possible when re-running in the same session —
+   reuse it and skip to step 6.
+
+   Nothing to reset either way: a worktree is new, and a local run is the user's checkout to
+   manage.
 
 5. **Initial empty commit.** `git commit --allow-empty -m "chore: start work on #{number}"`
 
@@ -84,20 +94,42 @@ steps 1, 2, and 7. Useful for local work on `main`.
    The draft PR exists from the start so CI runs against the work as it lands, and so
    `/finalize-pr` has a stable target. `/finalize-pr` rewrites this body later.
 
-   Keep `Closes #{number}` as the body's first line. It is what `/finalize-pr` and `/merge-pr`
-   fall back to when the proxy blocks the GraphQL-only `closingIssuesReferences` field.
+   Keep `Closes #{number}` as the body's first line. It is what links the PR to its issue for a
+   human reading either one, and what `/finalize-pr` and `/merge-pr` fall back to if the linkage is
+   ever edited away.
 
-   If `gh pr create` itself fails with `This GraphQL query is not enabled for this session`, use
-   the REST form in [the proxy reference](../../references/github-proxy.md) — the draft PR is not
-   optional, later steps target it.
+7. **Set up the environment.** A worktree has no `node_modules` and no `.venv`. Detect the
+   toolchain from a lockfile at the repo root, first match wins, and install:
 
-7. **Print the summary.**
+   | Lockfile | Install |
+   | --- | --- |
+   | `bun.lockb` | `bun install` |
+   | `pnpm-lock.yaml` | `pnpm install` |
+   | `package-lock.json` | `npm ci` |
+   | `yarn.lock` | `yarn install` |
+   | `uv.lock` | `uv sync` |
+
+   No lockfile matched → skip, and say so in step 8. A toolchain this skill was never taught looks
+   identical to a project with nothing to install unless it is named.
+
+   Skip this step entirely outside a worktree — a local checkout already has its dependencies, and
+   reinstalling into one is not this skill's business.
+
+   If the install fails, **stop and report it**. Every later step assumes a working environment,
+   and `/tdd` failing on a missing import is a much worse way to discover this.
+
+   Do not write `.env` files or fetch secrets. Gitignored config reaches a worktree through the
+   repo's `.worktreeinclude`; if something is missing, say which file and stop.
+
+8. **Print the summary.**
 
    ```
    Issue:    #{number} — {title}
    Branch:   {branch}
+   Worktree: {path}              (omit outside a worktree)
    PR:       {pr-url}
    Assigned: @me
+   Deps:     {installed with {cmd} | skipped — no lockfile matched | not a worktree}
 
    Next: /tdd to begin work.
    ```
@@ -108,8 +140,7 @@ steps 1, 2, and 7. Useful for local work on `main`.
 
 - Do not skip or reorder steps. If a git/gh command fails (except where marked non-fatal), stop and report.
 - Use the repo's actual default branch, never a hardcoded `main`.
-- Never `git reset --hard`, never delete a branch. A cloud session works in a disposable clone; if its state is wrong, the answer is a new session, not a destructive fix. Locally, an unexpected branch state is the user's to resolve.
-- Do not install dependencies or write env files. In a cloud session the environment's setup script owns that; locally it is already done.
+- Never `git reset --hard`, never delete a branch. In a worktree, a state you cannot explain is not yours to repair: report it, and let the human `claude rm` the session and re-dispatch. Locally, an unexpected branch state is the user's to resolve.
+- Never edit a file or run a command in the main checkout from inside a worktree. Claude Code blocks it, and the block is right: the point of the worktree is that the other sessions cannot see your work.
 - In `--no-branch` mode, do not commit, push, or open a PR. Still claim the issue — it is what tells the next dispatch this one is taken.
 - Never treat a GitHub write as done because it returned success. Where a read-back is specified, run it.
-- On `This GraphQL query is not enabled for this session`, consult [references/github-proxy.md](../../references/github-proxy.md). Never warn past that 403 — take the REST fallback, or stop.
