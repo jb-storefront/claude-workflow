@@ -1,7 +1,7 @@
 {
   "name": "workflow",
   "displayName": "Slice Workflow",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Spec-to-merge loop for GitHub-tracked vertical slices, each in its own git worktree: dispatch slices to parallel background sessions, drive each to a reviewed PR, and land the batch in dependency order.",
   "author": {
     "name": "Jacob Burcham"

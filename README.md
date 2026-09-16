@@ -21,6 +21,14 @@ GitHub-tracked vertical slices, each running in its own **git worktree** on your
 [mattpocock/skills](https://github.com/mattpocock/skills); this plugin supplies the four that
 surround them, plus `/rebase-pr` and `/merge-pr` for the single-PR cases.
 
+Two more sit beside the loop rather than inside it:
+
+- **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
+  intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.
+  It answers in slices first and quotes a band, never a point estimate.
+- **`/retro`** reviews a finished session and proposes changes to the agent's *environment* —
+  navigation pointers, automated checks, reviewer rules — rather than to the code.
+
 ## Install
 
 ```bash
@@ -59,8 +67,16 @@ worktree of that repo, and for everyone who clones it:
   .env.local
   ```
 
+- **`gh` authenticated with push access to the repo.** Not a convenience: `/start-issue` claims
+  its issue by adding an assignee, and GitHub silently ignores assignees without push access. The
+  skill reads the assignment back and stops, so without push access every dispatched session dies
+  on its first step.
+
 Dependencies are not a precondition — `/start-issue` installs them in each worktree from the
 project's lockfile.
+
+`/estimate-from-history` additionally wants `.claude/calibration/calibration.json`, committed. It
+generates it from the repo's merged PRs on first use; see that skill for the knobs.
 
 ## Design notes
 
