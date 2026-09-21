@@ -170,8 +170,16 @@ exactly as they did before any of this.
 
 ## The Slice body
 
-The sections the workflow reads. `/to-tickets` writes them; a hand-written Slice that carries them
-is indistinguishable.
+The sections the workflow reads. A hand-written Slice that carries them is indistinguishable from a
+published one.
+
+`/to-tickets` writes four of them: `## Parent`, `## What to build`, `## Acceptance criteria` and
+`## Blocked by`. `## Seam` and `## References for context` are not in its template, so they arrive
+by hand or not at all.
+
+That `## Seam` is absent from a published Slice is not a gap to be patched here. It is why
+`/acceptance-tests` asks for the Seam rather than reading it: the one gate input the tracker cannot
+be relied on to carry is the one a person is asked for.
 
 ```markdown
 ## Parent
