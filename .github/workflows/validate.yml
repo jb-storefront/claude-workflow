@@ -1,0 +1,25 @@
+name: Validate
+
+on:
+  pull_request:
+  # /anchor-spec commits Specs straight to the default branch, so a pull
+  # request gate alone would leave a path to main that nothing validates.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Deliberately unpinned: the gate asks whether current Claude Code can
+      # install this plugin, so a runtime that stops accepting the manifest
+      # should turn CI red rather than wait for someone to bump a pin.
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: ./scripts/validate.sh
