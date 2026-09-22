@@ -52,45 +52,100 @@ Be on the default branch with a clean tree before writing anything, because step
 `git status --porcelain` non-empty → stop and say so rather than committing someone else's work
 alongside the Spec edit.
 
-## 2. Read the critic from the per-repo workflow file
+## 2. Read the Critics list from the per-repo workflow file
 
-`docs/agents/workflow.md` holds two lines and nothing else:
+`docs/agents/workflow.md` holds one ordered list and nothing else:
 
 ```markdown
-**Critic:** codex, gpt-6-astra
-**Fallback:** claude, claude-opus-5
+**Critics:**
+1. codex, default
+2. google, gemini-3.8-flash-high
+3. claude, claude-opus-5
 ```
 
-Read it here, on demand. Nothing from this file belongs in a session's context, which is why it sits
-outside `CLAUDE.md` and why no other skill reads it.
+Each entry is `{vendor}, {model}`. Read it here, on demand. Nothing from this file belongs in a
+session's context, which is why it sits outside `CLAUDE.md` and why no other skill reads it.
 
-**When the file does not exist**, do not invent a critic. There is no configured model to pass, so
-the Codex path is unavailable by definition: go straight to the fallback on `claude-opus-5`, say
-once that `docs/agents/workflow.md` is missing and that `/setup-workflow` writes it, and record the
-critic that actually ran. A guessed model name in a `--model` flag fails loudly at best and silently
-runs something else at worst.
+Two shapes of this file are unusable, and each stops the run before any critic is dispatched:
 
-## 3. Choose the critic
+| Condition | What to say |
+| --- | --- |
+| The last entry's vendor is not `claude` | The chain has no floor. Name the last entry, and say that the final entry must be a Claude model because it is the only vendor that runs with nothing installed. |
+| An entry names a vendor that is not `codex`, `google` or `claude` | Name it, and say there is no dispatch path for it. Do not guess one. |
 
-The point of this gate is that a different vendor's model doubts what a Claude session wrote, so
-Codex is tried first and the Claude fallback exists only so the gate works on a machine that has
-never installed it.
+**When the file does not exist**, do not invent a chain. There is no configured model to pass, so
+every vendor that needs one is unavailable by definition: go straight to the Claude fallback on
+`claude-opus-5`, say once that `docs/agents/workflow.md` is missing and that `/setup-workflow`
+writes it, and record the critic that actually ran. A guessed model name in a `--model` flag fails
+loudly at best and silently runs something else at worst.
 
-Codex is available when **both** hold:
+A file in the superseded two-line shape, `**Critic:**` and `**Fallback:**`, is read as the two-entry
+chain it encodes, in that order. Say once that the file is in the old shape and that
+`/setup-workflow` rewrites it. `CONTRACTS.md` documents only the list.
 
-- `command -v codex` finds the CLI, and
-- the `codex:codex-rescue` subagent appears in this session's available agent types.
+## 3. Walk the chain and pick the critic that runs
 
-Either one absent means the fallback runs. Check both: the plugin without the CLI dispatches an
-agent that cannot reach a model, and the CLI without the plugin leaves nothing to dispatch.
+The point of this gate is that a different vendor's model doubts what a Claude session wrote. That
+is why the Claude entry sits last: it is the floor that makes the gate work on a machine which has
+installed nothing, not the critic the gate wants.
 
-Whichever runs, **hold on to which one it was**. The Critique line names it, and a line naming a
-critic that did not run is worse than no line.
+Take the entries in order. An entry runs only if it is **available**, and it counts only if it
+**produces findings**. Two questions, in that order, and both have to be answered before moving on.
+
+**The first entry that produces findings ends the walk.** Do not dispatch anything below it, do not
+run a second critic for comparison, and do not fall through to the Claude entry because an earlier
+entry's findings look thin. One Critique per run, from one entry, and the chain exists to find which
+entry that is — not to collect several opinions.
+
+**Available.** What each vendor needs before it is worth dispatching:
+
+| Vendor | Available when all of these hold |
+| --- | --- |
+| `codex` | `command -v codex` finds the CLI, and `codex:codex-rescue` appears in this session's available agent types |
+| `google` | `command -v agy` finds the CLI, `antigravity:agy-rescue` appears in this session's available agent types, and the entry's model id appears in `agy models` |
+| `claude` | always — it is the session you are already in |
+
+Check every part. A plugin without its CLI dispatches an agent that cannot reach a model, and a CLI
+without its plugin leaves nothing to dispatch.
+
+**The `agy models` check is not optional for a `google` entry.** Run it and match the entry's model
+against the ids in the first column:
+
+```bash
+agy models
+```
+
+It prints one tab-separated `{id}\t{display label}` per line under a `Fetching available models...`
+header. Match on the id, which is what `--model` takes. An id that is absent — misspelled, or not
+offered on this account's tier — makes the entry unavailable: **say the id is unavailable, do not
+dispatch agy, and move to the next entry.** Which ids exist depends on the account, so this has to
+be read live and never from a list baked into this skill. `agy models` on a signed-out account
+cannot answer, which is the same answer: unavailable, move on.
+
+**Produces findings.** Availability is not usability. A CLI can be installed and logged out, and
+both of these CLIs sit in exactly that state on a fresh machine. An unauthenticated headless
+`agy --print` exits 0 having written nothing, a failure the antigravity plugin documents; a
+dispatched agent can also return an error, a re-auth instruction, or an empty report. None of those
+is a Critique.
+
+So when a dispatched entry returns nothing usable — no findings under the seven headings, an empty
+report, or the agent's own message that it could not reach a model — **say which entry returned
+nothing and move to the next entry.** Falling through on a silent failure, and not only on absent
+tooling, is what makes the Claude floor reachable in the case it exists for.
+
+**When every entry has been tried and none produced findings, stop.** Report that no critic produced
+a Critique, name what each entry did, and write no Critique line and no comment. A Spec left at
+`draft` is a gate that held; a Critique line naming a critic that produced nothing is a gate that
+lied.
+
+Whichever entry runs, **hold on to which one it was**. The Critique line names it, and a line naming
+a critic that did not run is worse than no line.
 
 ## 4. Write the prompt
 
-One prompt, used verbatim by whichever critic runs, so the two paths are comparable. Fill in the
-paths and the Spec title; change nothing else.
+One prompt, used verbatim by whichever entry of the chain runs, so the paths are comparable and a
+Critique reads the same whoever produced it. Fill in the paths and the Spec title; change nothing
+else.
 
 ```
 You are doubting a specification, not writing code. Do not edit, create, or delete any
@@ -126,30 +181,51 @@ findings. Report what you doubt.
 The read-only instruction leads because a critic that edits the Spec has pre-empted the founder's
 resolution in step 7, which is the one step of this skill that is not the agent's to make.
 
-## 5. Dispatch the critic
+## 5. Dispatch the entry
 
-**Codex path.** Use the Agent tool with `subagent_type: "codex:codex-rescue"` and the step 4 prompt,
-prefixed with one line telling it which model to use:
+Every vendor is dispatched through the Agent tool. Only the subagent and how the model is named
+differ.
+
+**`codex`.** `subagent_type: "codex:codex-rescue"`, with the step 4 prompt prefixed by one line
+naming the model:
 
 ```
-Run with --model {critic_model} from the per-repo workflow file. Do not substitute another model.
+Run with --model {model} from the per-repo workflow file. Do not substitute another model.
 ```
 
-The model is passed explicitly because the whole value of this gate is which model ran, and a
-default is not that.
+When the entry's model is `default`, say so instead and let the wrapper choose: the Codex plugin
+asks callers to leave `--model` unset unless a specific model was requested, and `default` is the
+entry recording that choice.
 
-**Fallback path.** Use the Agent tool with the step 4 prompt, `model` set to the fallback model, and
-a read-only `subagent_type`: prefer a read-only agent type the project offers (`Explore` is one);
-otherwise `general-purpose`, whose write tools the prompt's first paragraph forbids.
+**`google`.** `subagent_type: "antigravity:agy-rescue"`, with the step 4 prompt prefixed by:
+
+```
+MODEL: {model}
+Run agy with --model {model}. Do not substitute another model. This is a read-only
+review: do not pass --add-dir and do not write any file.
+```
+
+`agy-rescue` is a thin forwarding wrapper around `agy --print`, the same role `codex-rescue` plays
+for Codex. It omits `--model` unless the caller asks for one, so the entry's model has to be named
+here or the Critique line would record a model that was never passed. Step 3 has already confirmed
+the id against `agy models`, which is what makes naming it safe.
+
+**`claude`.** The step 4 prompt, `model` set to the entry's model, and a read-only `subagent_type`:
+prefer a read-only agent type the project offers (`Explore` is one); otherwise `general-purpose`,
+whose write tools the prompt's first paragraph forbids.
 
 If the Agent tool rejects the model you pass — the workflow file may name a model this harness
-addresses by a different alias — **say so and stop rather than running on the default**. Map the
-configured name to the alias the tool accepts if an obvious one exists, and name the mapping in what
-you report. What must never happen is the Critique line claiming a model that did not run.
+addresses by a different alias — **do not run on the default**. Map the configured name to the alias
+the tool accepts if an obvious one exists, and name the mapping in what you report. If no obvious
+mapping exists, the entry is unavailable: say so and move to the next one, the same as any other
+entry that cannot run as configured. What must never happen is the Critique line claiming a model
+that did not run.
 
-Wait for the agent to finish. An agent that returns nothing usable is a failed run: report it and
-stop. Do not write the findings yourself. This session synthesised the Spec; this session doubting
-it is the thing the gate exists to prevent.
+Wait for the agent to finish. **An agent that returns nothing usable has not failed the run, it has
+failed its entry:** apply step 3's fall-through, say which entry returned nothing, and try the next.
+Do not write the findings yourself, at any point in the chain. This session synthesised the Spec;
+this session doubting it is the thing the gate exists to prevent, which is also why the Claude entry
+is a fresh subagent and not this session reading the Spec again.
 
 ## 6. Post the findings as one comment
 
@@ -199,7 +275,7 @@ Critique line directly after `**Tracker:**`:
 ```markdown
 **Status:** critiqued
 **Tracker:** #60
-**Critique:** codex (gpt-6-astra), #60 comment 2847193044, 2026-09-18
+**Critique:** google (gemini-3.8-flash-high), #60 comment 2847193044, 2026-09-18
 ```
 
 The critic is `{vendor} ({model})` — the one that actually ran, from step 3. The comment reference
@@ -244,7 +320,8 @@ the reason neither skill carries a mode.
 
 ```
 Spec:     docs/specs/{number}-{slug}.md
-Critic:   {vendor} ({model}){, fallback — Codex not installed}
+Critic:   {vendor} ({model}) — entry {i} of {n} in the Critics list
+Skipped:  {one line per earlier entry, naming it and why it did not run}
 Findings: {n} — {a} accepted, {o} moved to Out of Scope, {r} rejected
 Comment:  {comment_url}
 Status:   draft → critiqued
@@ -262,8 +339,16 @@ written down, and the next reader of this Spec deserves to know what was doubted
 - The file is the Spec. When it and the Spec issue body disagree, the file is right.
 - Never write the findings yourself, and never let the critic write the Spec. The critic doubts, the
   founder resolves, this skill edits.
-- Never claim a critic that did not run. If the configured model could not be passed, stop.
+- Never claim a critic that did not run. The Critique line names the entry that produced the
+  findings, never an earlier one that was skipped or returned nothing.
+- An entry that is absent, that cannot be run as configured, or that returns nothing usable is
+  skipped, not fatal. The chain is only exhausted when its last entry has been tried.
+- When no entry produces findings, write no Critique line and no comment, and leave the Spec at
+  `draft`.
 - Never renumber a Criterion.
-- Nothing from `docs/agents/workflow.md` enters the session's context beyond the two values this
-  skill needs.
+- The last entry of the Critics list must name `claude`. Without a floor the chain can run out,
+  and a gate that can run out is not a gate.
+- Never dispatch a `google` entry whose model id `agy models` does not list.
+- Nothing from `docs/agents/workflow.md` enters the session's context beyond the entries this skill
+  walks.
 - The Status change is only real once it is on the remote default branch.

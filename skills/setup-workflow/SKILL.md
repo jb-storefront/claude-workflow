@@ -76,19 +76,24 @@ an agent that writes PR descriptions, one that reviews code, and one that writes
 has a domain-taught reviewer under some other name **has that role covered**, and this skill must
 not hand it a generic template.
 
-**Two third-party dependencies, checked and never installed**
+**Three third-party dependencies, checked and never installed**
 
 - **Pocock's skills.** Installed: `claude plugin list` mentions `mattpocock-skills`. Setup has run:
   `docs/agents/issue-tracker.md` and `docs/agents/domain.md` both exist. The plugin can be present
   while its setup has not run, and the second is the one the loop depends on.
 - **Codex.** CLI: `command -v codex`. Plugin: `claude plugin list` mentions `codex@openai-codex`,
   which is [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and supplies the
-  `codex-rescue` agent that `/critique-spec` dispatches as `codex:codex-rescue`. Report the two
-  separately: the plugin installs without the CLI, and in that state `/critique-spec` finds its
-  agent and the agent has nothing to run.
+  `codex-rescue` agent that `/critique-spec` dispatches as `codex:codex-rescue`.
+- **Antigravity.** CLI: `command -v agy`. Plugin: `claude plugin list` mentions
+  `antigravity@marcosnahuel-antigravity`, which is
+  [MarcosNahuel/antigravity-plugin-cc](https://github.com/MarcosNahuel/antigravity-plugin-cc) and
+  supplies the `agy-rescue` agent that `/critique-spec` dispatches as `antigravity:agy-rescue`.
 
-  `/critique-spec` prefers Codex and falls back to Claude, so a machine without it is not broken.
-  It is running the fallback critic.
+Report each CLI and its plugin **separately**. A plugin installs without its CLI, and in that state
+`/critique-spec` finds the agent and the agent has nothing to run. Neither vendor missing is a
+broken repo: `/critique-spec` walks its Critics list and the Claude entry at the end always runs.
+What a missing vendor costs is the gate's whole point, a model from another vendor doubting what a
+Claude session wrote, so say which vendors this machine can actually reach.
 
 ## 2. Draft
 
@@ -99,7 +104,7 @@ Print one block per artifact, in the order of §3, each marked with what will ha
   write    .worktreeinclude           + .env, + .env.local
   merge    .claude/settings.json      + extraKnownMarketplaces.jb-workflow, + 2 enabledPlugins
   write    docs/specs/.gitkeep        new
-  write    docs/agents/workflow.md    new
+  write    docs/agents/workflow.md    new (3 critics: codex, google, claude)
   copy     .claude/agents/            + pr-writer.md, + test-writer.md
   skip     .claude/agents/            code-reviewer: ucp-demo-code-reviewer.md covers the role
   append   CLAUDE.md                  + ## Slice workflow
@@ -111,7 +116,7 @@ their other keys survived.
 
 Then ask once:
 
-> Write these? (the workflow file's critic line is a one-line edit afterwards)
+> Write these? (the workflow file's Critics list is an edit afterwards, not a release)
 
 Nothing is written before that answer. `--dry-run` stops here.
 
@@ -205,26 +210,45 @@ only on this machine is not in the worktrees that `/anchor-spec` and every Slice
 and those are cut from the remote default branch.
 
 **5. Write the per-repo workflow file.** `docs/agents/workflow.md`, beside Pocock's
-`issue-tracker.md`, `triage-labels.md` and `domain.md`. Two lines, and nothing else:
+`issue-tracker.md`, `triage-labels.md` and `domain.md`. One ordered list, and nothing else:
 
 ```markdown
-**Critic:** codex, default
-**Fallback:** claude, claude-opus-5
+**Critics:**
+1. codex, default
+2. google, gemini-3.8-flash-high
+3. claude, claude-opus-5
 ```
 
 `/critique-spec` reads it; nothing else does, and nothing in it is loaded into a session's context.
-Changing the critic model is an edit to that line, not a release of this plugin, so say so in §4.
+It walks the list in order and runs the first entry that can actually produce a Critique on this
+machine. Changing the critics, or their order, is an edit to this file and not a release of this
+plugin, so say so in §4.
 
-**`default` means let Codex choose**, and it is the default here because the Codex plugin's own
-runtime says to leave `--model` unset unless the user asks for a specific one. Pin a model by
-replacing the word: `codex-rescue` passes a concrete name straight through to `--model`, and maps
-the word `spark` to `gpt-5.3-codex-spark`.
+**Write all three entries even when the CLIs are missing.** An entry costs nothing when its vendor
+is absent — `/critique-spec` skips it and moves on — and a user who installs Codex or Antigravity
+next month gets a working chain without editing anything. Writing only the Claude entry would make
+installing a CLI a silent no-op.
 
-`CONTRACTS.md` illustrates this line with `gpt-6-astra`, which no version of the Codex plugin
-recognises. Follow the shape it documents, not that example.
+**The last entry must name `claude`**, because it is the only vendor that runs with nothing
+installed. `/critique-spec` stops on a list whose last entry is any other vendor, so never write one
+and never reorder a user's list in a way that moves their Claude entry off the end.
 
-If the file exists and already carries both lines, leave it **completely alone**, whatever models
-it names. The user's choice of critic is the whole reason this file exists.
+**`default` in the model position means let that vendor's wrapper choose.** It is written on the
+`codex` entry because the Codex plugin's own runtime says to leave `--model` unset unless the user
+asks for a specific one; `codex-rescue` passes a concrete name straight through to `--model`, and
+maps the word `spark` to `gpt-5.3-codex-spark`. The `google` entry names a model instead, because
+`agy-rescue` omits `--model` unless the caller supplies one, and `/critique-spec` checks the id
+against `agy models` before it dispatches. Any id from that list works; `gemini-3.8-flash-high` is
+the default here because a Critique is a read-and-report job.
+
+If the file already exists, leave it **completely alone**, whatever vendors and models it names, as
+long as its last entry is a `claude` one. The user's choice of critics is the whole reason this file
+exists.
+
+A file in the superseded two-line shape, `**Critic:**` and `**Fallback:**`, is the one exception.
+Offer to rewrite it as the list its two lines already encode, keeping both vendors and both models
+in that order, and show the result in §2 like any other write. Never add, drop, or reorder an entry
+while doing it: this converts a shape, it does not choose a critic.
 
 **6. Copy the agent templates.** From this skill's `templates/agents/` into the repo's
 `.claude/agents/`:
@@ -280,7 +304,7 @@ Repo:      {owner}/{repo} on {default branch}
   {written | unchanged | not needed}  .worktreeinclude    {paths, or "no gitignored .env files"}
   {merged | unchanged}   .claude/settings.json   marketplace + 2 plugins
   {created | unchanged}  docs/specs/
-  {written | unchanged}  docs/agents/workflow.md critic: codex, default
+  {written | unchanged}  docs/agents/workflow.md critics: codex → google → claude
   {copied | unchanged}   .claude/agents/         {files, or which existing agent covers each role}
   {appended | unchanged} {CLAUDE.md}             ## Slice workflow
 
@@ -311,7 +335,7 @@ Pocock's skills: setup has not run in this repo
 **Codex**, when the CLI or the plugin is missing:
 
 ```
-Codex critic: unavailable, so /critique-spec will run the Claude fallback
+Codex critic: unavailable, so /critique-spec skips entry 1 of the Critics list
 
   codex plugin  {installed | not found}   /plugin marketplace add openai/codex-plugin-cc
                                           /plugin install codex@openai-codex
@@ -326,19 +350,43 @@ Codex critic: unavailable, so /critique-spec will run the Claude fallback
   everyone who clones this repo is yours to decide, not this skill's.
 ```
 
-Print the plugin lines before the CLI lines, because `/codex:setup` ships with the plugin and is
-the better way to get the CLI. Telling someone to `npm install` first and then install the plugin
-that would have done it for them is the wrong order.
+**Antigravity**, when the CLI or the plugin is missing, in the same shape and for the same reason:
+
+```
+Google critic: unavailable, so /critique-spec skips entry 2 of the Critics list
+
+  antigravity plugin  {installed | not found}   /plugin marketplace add MarcosNahuel/antigravity-plugin-cc
+                                                /plugin install antigravity@marcosnahuel-antigravity
+                                                /reload-plugins
+  agy CLI             {on PATH | not found}     /antigravity:setup
+
+  /antigravity:setup comes with the plugin and reports whether agy is installed and responding.
+  To do it yourself, install the Antigravity CLI from https://antigravity.google/cli, then run
+  `agy` once in a real terminal to sign in.
+
+  Nothing about Antigravity was written into .claude/settings.json: enabling a third-party plugin
+  for everyone who clones this repo is yours to decide, not this skill's.
+```
+
+For each vendor, print the plugin lines before the CLI lines, because the plugin's own setup command
+ships with it and is the better way to get the CLI. Telling someone to install a binary first and
+then install the plugin that would have done it for them is the wrong order.
+
+**Sign-in is the part neither check can see.** Both CLIs are on `PATH` and logged out on a fresh
+machine, and in that state `/critique-spec` dispatches the entry and gets nothing back. It falls
+through to the next entry, so the gate still works, but the vendor the user thought they had
+configured is not the one doubting their Spec. Say so once: an installed CLI is reported here as
+present, and only a real Critique proves it is signed in.
 
 Close with: re-running `/setup-workflow` is safe and reports `unchanged` for everything already
-done. Changing the critic is an edit to one line of `docs/agents/workflow.md`.
+done. Changing the critics, or their order, is an edit to `docs/agents/workflow.md`.
 
 ## Rules
 
 - **Explore, draft, confirm, write.** Never write before the confirmation, on any run, including
   one where every artifact is absent and the answer looks obvious.
 - **Idempotent means unchanged, not rewritten.** Re-running must not reorder a file, restyle JSON,
-  or replace a user's chosen critic model, agent, or pointer prose. Report `unchanged` and move on.
+  or replace a user's chosen critics, agent, or pointer prose. Report `unchanged` and move on.
 - **Merge, never replace, for `.claude/settings.json` and `.worktreeinclude`.** Both are files the
   repo owns and this skill is a guest in.
 - **Never read or print a `.env` file.** Paths only.
