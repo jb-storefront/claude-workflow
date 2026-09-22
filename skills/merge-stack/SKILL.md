@@ -234,7 +234,22 @@ For each PR in the order:
   and `git worktree list` shows only the main checkout. Report anything left as a stray needing
   manual attention, and re-run `claude agents --json` to confirm no slice session is still alive.
 
-## 7. Summary
+## 7. Spec close-out
+
+A batch is the normal way a Spec's last Slice lands, and it can finish more than one Spec at once.
+Run the procedure in [../../references/spec-close-out.md](../../references/spec-close-out.md),
+handing it every Slice the batch closed — the `closingIssuesReferences` collected in §4.6, pooled
+across the whole batch.
+
+Once, here, rather than per PR inside §4: the procedure runs a Verification against the default
+branch, and mid-batch that branch is still moving. Run after §6 and it is the tree the whole batch
+produced. Nothing is missed by waiting, because a Spec completes only when its last Slice closes,
+and by §6 every merge in the batch has happened.
+
+The procedure decides for itself whether anything is due, and leaves a Spec with Slices still open
+untouched.
+
+## 8. Summary
 
 ```
 /merge-stack — Complete ({M}/{N} merged)
@@ -246,7 +261,11 @@ For each PR in the order:
 
 Blocked/excluded: #80 (draft), #67 (excluded)
 Strays:           none
+Specs:            #60 closed out;  #66 still has 1 Slice open
 ```
+
+Each Spec that closed out prints its own block after this one, and any walkthrough Verification
+after all of them, per §7's procedure.
 
 ## Rules
 

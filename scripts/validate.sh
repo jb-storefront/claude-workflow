@@ -58,4 +58,26 @@ for template in skills/*/templates/agents/*.md; do
   if [ "$ok" -eq 1 ]; then echo "✔ $(basename "$template")"; else fail=1; fi
 done
 
+# A skill that cites a file it cannot open is a skill that silently skips a
+# step, and nothing in a prose plugin fails loudly when that happens.
+#
+# .claude/worktrees holds a full checkout per in-flight slice, so walking it
+# would judge this repo by another slice's half-written links.
+echo "== references"
+while IFS= read -r md; do
+  while IFS= read -r target; do
+    case "$target" in
+      "" | http://* | https://* | mailto:* | \#*) continue ;;
+    esac
+    resolved="$(dirname "$md")/${target%%#*}"
+    if [ ! -e "$resolved" ]; then
+      echo "✘ $md links to $target, which is not on disk"
+      fail=1
+    fi
+  done < <(grep -oE '\]\([^)]+\)' "$md" | sed -E 's/^\]\(//; s/ +"[^"]*"$//; s/\)$//')
+done < <(find . -name '*.md' \
+  -not -path './.git/*' \
+  -not -path './.claude/worktrees/*' \
+  -not -path './node_modules/*' | sort)
+
 exit $fail
