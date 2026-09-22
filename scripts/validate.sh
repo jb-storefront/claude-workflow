@@ -13,6 +13,11 @@ if ! claude plugin validate .claude-plugin/plugin.json --strict; then fail=1; fi
 echo "== marketplace"
 if ! claude plugin validate .claude-plugin/marketplace.json --strict; then fail=1; fi
 
+# Neither of the two commands above opens a SKILL.md; see the checker's docstring.
+echo "== skills"
+if ! python3 scripts/test-check-skill-frontmatter.py; then fail=1; fi
+if ! python3 scripts/check-skill-frontmatter.py skills; then fail=1; fi
+
 # Neither manifest can see the other, so strict validation passes on a version
 # disagreement that makes the marketplace advertise a release nobody shipped.
 echo "== versions"
