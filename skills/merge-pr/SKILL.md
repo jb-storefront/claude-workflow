@@ -112,7 +112,23 @@ holds its lock for a running session. So the order is fixed — stop, remove, de
   commits, so `-d` always refuses. If `{head_ref}` *is* the current branch, `git switch
   {default_branch}` first.
 
-## 6. Summary
+## 6. Spec close-out
+
+A merged Slice can be the last one a Spec was waiting on, and when it is, the feature is finished
+and the Spec has to say so. Run the procedure in
+[../../references/spec-close-out.md](../../references/spec-close-out.md), handing it the
+`closingIssuesReferences` recorded in §1.
+
+That procedure decides for itself whether anything is due. A merge that closed no Slice, a Slice
+with no parent Spec, and a Spec with other Slices still open each leave the Spec file and the Spec
+issue exactly as they were.
+
+It needs the main checkout, because it commits to the default branch and that branch is checked out
+there. Running `/merge-pr` from inside a slice's worktree is otherwise fine and stays fine — the
+close-out is the one step that pauses, and it reports which Spec is waiting so you can finish it
+from the main checkout.
+
+## 7. Summary
 
 ```
 /merge-pr — Complete
@@ -121,7 +137,11 @@ PR:       #{pr_number} — {pr_title}  [MERGED]
 Branch:   {head_ref}  [DELETED on remote{, and locally}]
 Worktree: {removed | kept — holds unpushed work, see above | none}
 Issues:   {linked_issues or "none"}  [CLOSED]
+Spec:     {#60 closed out — see below | #60 still has 2 Slices open | none}
 ```
+
+A Spec that closed out prints its own block after this one, and a walkthrough Verification after
+that, per §6's procedure.
 
 ## Rules
 
