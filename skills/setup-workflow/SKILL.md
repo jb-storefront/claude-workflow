@@ -81,9 +81,14 @@ not hand it a generic template.
 - **Pocock's skills.** Installed: `claude plugin list` mentions `mattpocock-skills`. Setup has run:
   `docs/agents/issue-tracker.md` and `docs/agents/domain.md` both exist. The plugin can be present
   while its setup has not run, and the second is the one the loop depends on.
-- **Codex.** CLI: `command -v codex`. Plugin: `claude plugin list` mentions a plugin providing the
-  `codex-rescue` agent. `/critique-spec` prefers Codex and falls back to Claude, so a machine
-  without it is not broken. It is running the fallback critic.
+- **Codex.** CLI: `command -v codex`. Plugin: `claude plugin list` mentions `codex@openai-codex`,
+  which is [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) and supplies the
+  `codex-rescue` agent that `/critique-spec` dispatches as `codex:codex-rescue`. Report the two
+  separately: the plugin installs without the CLI, and in that state `/critique-spec` finds its
+  agent and the agent has nothing to run.
+
+  `/critique-spec` prefers Codex and falls back to Claude, so a machine without it is not broken.
+  It is running the fallback critic.
 
 ## 2. Draft
 
@@ -203,12 +208,20 @@ and those are cut from the remote default branch.
 `issue-tracker.md`, `triage-labels.md` and `domain.md`. Two lines, and nothing else:
 
 ```markdown
-**Critic:** codex, gpt-6-astra
+**Critic:** codex, default
 **Fallback:** claude, claude-opus-5
 ```
 
 `/critique-spec` reads it; nothing else does, and nothing in it is loaded into a session's context.
 Changing the critic model is an edit to that line, not a release of this plugin, so say so in §4.
+
+**`default` means let Codex choose**, and it is the default here because the Codex plugin's own
+runtime says to leave `--model` unset unless the user asks for a specific one. Pin a model by
+replacing the word: `codex-rescue` passes a concrete name straight through to `--model`, and maps
+the word `spark` to `gpt-5.3-codex-spark`.
+
+`CONTRACTS.md` illustrates this line with `gpt-6-astra`, which no version of the Codex plugin
+recognises. Follow the shape it documents, not that example.
 
 If the file exists and already carries both lines, leave it **completely alone**, whatever models
 it names. The user's choice of critic is the whole reason this file exists.
@@ -267,7 +280,7 @@ Repo:      {owner}/{repo} on {default branch}
   {written | unchanged | not needed}  .worktreeinclude    {paths, or "no gitignored .env files"}
   {merged | unchanged}   .claude/settings.json   marketplace + 2 plugins
   {created | unchanged}  docs/specs/
-  {written | unchanged}  docs/agents/workflow.md critic: codex, gpt-6-astra
+  {written | unchanged}  docs/agents/workflow.md critic: codex, default
   {copied | unchanged}   .claude/agents/         {files, or which existing agent covers each role}
   {appended | unchanged} {CLAUDE.md}             ## Slice workflow
 
@@ -300,14 +313,22 @@ Pocock's skills: setup has not run in this repo
 ```
 Codex critic: unavailable, so /critique-spec will run the Claude fallback
 
-  codex CLI     {on PATH | not found}   npm install -g @openai/codex && codex login
-  codex plugin  {installed | not found} claude plugin marketplace add <owner>/<repo>
-                                        claude plugin install codex@<marketplace>
+  codex plugin  {installed | not found}   /plugin marketplace add openai/codex-plugin-cc
+                                          /plugin install codex@openai-codex
+                                          /reload-plugins
+  codex CLI     {on PATH | not found}     /codex:setup
 
-  This plugin does not vendor a marketplace for the Codex plugin, so the owner and repo are the
-  ones you use. Nothing about Codex was written into .claude/settings.json: enabling a
-  third-party plugin for everyone who clones this repo is yours to decide, not this skill's.
+  /codex:setup comes with the plugin, reports whether Codex is ready, and offers to install the
+  CLI. To do it yourself: npm install -g @openai/codex, then !codex login. Codex needs Node 18.18
+  or later and a ChatGPT subscription or an OpenAI API key.
+
+  Nothing about Codex was written into .claude/settings.json: enabling a third-party plugin for
+  everyone who clones this repo is yours to decide, not this skill's.
 ```
+
+Print the plugin lines before the CLI lines, because `/codex:setup` ships with the plugin and is
+the better way to get the CLI. Telling someone to `npm install` first and then install the plugin
+that would have done it for them is the wrong order.
 
 Close with: re-running `/setup-workflow` is safe and reports `unchanged` for everything already
 done. Changing the critic is an edit to one line of `docs/agents/workflow.md`.
