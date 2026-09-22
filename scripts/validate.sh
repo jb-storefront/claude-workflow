@@ -30,4 +30,32 @@ else
   fail=1
 fi
 
+# The agent templates carry frontmatter too, and nothing else opens them. The
+# skills themselves are checked by scripts/check-skill-frontmatter.py above.
+frontmatter() { awk 'NR==1 && $0!="---" {exit} NR>1 && $0=="---" {exit} NR>1' "$1"; }
+
+# Without this an empty glob is passed through literally and the loop runs once
+# on a filename that does not exist, which reads as a failure rather than as
+# nothing to check.
+shopt -s nullglob
+
+# /finalize-pr finds agents by the role in their frontmatter, not by filename,
+# and the adopter is asked to teach each one the domain in exactly one place.
+# Both are properties of the shipped file, so both are checkable here.
+echo "== agent templates"
+for template in skills/*/templates/agents/*.md; do
+  fm=$(frontmatter "$template")
+  name=$(printf '%s\n' "$fm" | sed -n 's/^name:[[:space:]]*//p')
+  desc=$(printf '%s\n' "$fm" | sed -n 's/^description:[[:space:]]*//p')
+  placeholders=$(grep -c '{{DOMAIN}}' "$template" || true)
+  ok=1
+  [ -z "$name" ] && { echo "✘ $template: frontmatter has no name"; ok=0; }
+  [ -z "$desc" ] && { echo "✘ $template: frontmatter has no description"; ok=0; }
+  if [ "$placeholders" -ne 1 ]; then
+    echo "✘ $template: $placeholders {{DOMAIN}} placeholders, expected exactly 1"
+    ok=0
+  fi
+  if [ "$ok" -eq 1 ]; then echo "✔ $(basename "$template")"; else fail=1; fi
+done
+
 exit $fail
