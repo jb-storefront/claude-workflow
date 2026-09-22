@@ -30,41 +30,14 @@ else
   fail=1
 fi
 
-# `claude plugin validate` only ever reads a manifest. A SKILL.md with no `name`
-# passes it, so "the skill validates" would be true by construction and could
-# never disagree with the file. These two checks are what make that claim mean
-# something.
+# The agent templates carry frontmatter too, and nothing else opens them. The
+# skills themselves are checked by scripts/check-skill-frontmatter.py above.
 frontmatter() { awk 'NR==1 && $0!="---" {exit} NR>1 && $0=="---" {exit} NR>1' "$1"; }
 
 # Without this an empty glob is passed through literally and the loop runs once
 # on a filename that does not exist, which reads as a failure rather than as
 # nothing to check.
 shopt -s nullglob
-
-echo "== skills"
-for skill in skills/*/SKILL.md; do
-  dir=$(basename "$(dirname "$skill")")
-  fm=$(frontmatter "$skill")
-  name=$(printf '%s\n' "$fm" | sed -n 's/^name:[[:space:]]*//p')
-  desc=$(printf '%s\n' "$fm" | sed -n 's/^description:[[:space:]]*//p')
-  ok=1
-  if [ -z "$name" ]; then
-    echo "✘ $skill: frontmatter has no name"
-    ok=0
-  elif [ "$name" != "$dir" ]; then
-    # The name is what a skill is invoked by; a name that disagrees with its
-    # directory is a skill nobody can call by the path they can see.
-    echo "✘ $skill: name is '$name' but the directory is '$dir'"
-    ok=0
-  fi
-  if [ -z "$desc" ]; then
-    # The description is the only thing the model reads when deciding whether a
-    # skill applies, so a skill without one is a skill that never triggers.
-    echo "✘ $skill: frontmatter has no description"
-    ok=0
-  fi
-  if [ "$ok" -eq 1 ]; then echo "✔ $dir"; else fail=1; fi
-done
 
 # /finalize-pr finds agents by the role in their frontmatter, not by filename,
 # and the adopter is asked to teach each one the domain in exactly one place.
