@@ -201,8 +201,8 @@ entry recording that choice.
 
 ```
 MODEL: {model}
-Run agy with --model {model}. Do not substitute another model. This is a read-only
-review: do not pass --add-dir and do not write any file.
+Run agy with --model {model}. Do not substitute another model. This is read-only:
+do not pass --add-dir and do not write any file.
 ```
 
 `agy-rescue` is a thin forwarding wrapper around `agy --print`, the same role `codex-rescue` plays
