@@ -58,7 +58,7 @@ from the body rather than from GitHub's own linkage, since a hand-edited body co
 
 ### The id on each checkbox
 
-`{id}` is the cited form — `#60 C1`, one space — at the head of the checkbox text. Three cases:
+`{id}` is the cited form `#60 C1`, one space, at the head of the checkbox text. Three cases:
 
 | What the checkbox carries | `{id}` | Where the Criterion's full text lives |
 | --- | --- | --- |
@@ -167,7 +167,7 @@ read the frontmatter `name`/`description` of each file and pick the one that wri
 descriptions. Use the Agent tool with `subagent_type` set to that frontmatter `name` and
 `prompt: "Write the PR description for PR #{pr_number}."` Wait for completion.
 
-If there is none: generate a minimal PR body inline — the Criteria list (verbatim from the Slice) plus `Closes #{issue_number}` — and update via `gh pr edit {pr_number} --body @-` from a heredoc.
+If there is none: generate a minimal PR body inline, the Criteria list (verbatim from the Slice) plus `Closes #{issue_number}`, and update via `gh pr edit {pr_number} --body @-` from a heredoc.
 
 ## 9. Dispatch the code reviewer, with the drift question
 
@@ -190,7 +190,7 @@ advisory either way. An exact answer would need file paths inside Specs, which i
 
 ### With a project code-reviewer agent
 
-Look for one in `.claude/agents/` the same way as §8 — by role, not filename
+Look for one in `.claude/agents/` the same way as §8, by role and not by filename
 (`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). Launch it with sentinel-line gating.
 Prompt:
 
@@ -199,13 +199,13 @@ Review PR #{pr_number}.
 
 These Specs describe behaviour that already ships:
 
-{one line per candidate: `docs/specs/60-loyalty-earn-and-burn.md` — {its title}}
+{one line per candidate: `docs/specs/60-loyalty-earn-and-burn.md`, {its title}}
 {or, with no candidates: "No implemented Specs match the changed paths."}
 
 Flag any behaviour this diff changes that one of those Specs describes, where that Spec was
 not itself edited in this diff. Report each as:
 
-spec-drift: {spec file} — {the behaviour} — {path:line}
+spec-drift: {spec file} | {the behaviour} | {path:line}
 
 These drift findings are advisory. Do not count them in CRITICAL_COUNT or HIGH_COUNT, and do
 not let them change VERDICT.
@@ -256,16 +256,32 @@ attempted. `CONTRACTS.md` defines the four; this is how to decide between them.
 
 Two inputs:
 
-- **Test names in the diff.** `gh pr diff {pr_number}`, added (`+`) lines only. A Criterion has a
-  test when an added line contains its id as a literal — the bytes `#60 C1`. That one rule catches a
-  new test, a `describe` block wrapping several cases, a parametrised case, and a Python docstring
-  the runner reports. It also catches an existing test **renamed** to carry the id, which the
-  contract accepts as evidence, because a rename appears as an added line holding those bytes.
+- **Test names in the diff.** `gh pr diff {pr_number}`, added (`+`) lines only, **in test files
+  only**. A Criterion has a test when such a line contains its id as a literal: the bytes `#60 C1`.
+  That one rule catches a new test, a `describe` block wrapping several cases, a parametrised case,
+  and a Python docstring the runner reports. It also catches an existing test **renamed** to carry
+  the id, which the contract accepts as evidence, because a rename appears as an added line holding
+  those bytes.
+
+  A **test file** is one the project's own test runner collects. Use the project's layout when it
+  has one; otherwise a path with a `test`, `tests`, `spec` or `__tests__` segment, or a basename
+  matching `*.test.*`, `*.spec.*`, `*_test.*` or `test_*`.
+
+  Restricting to test files is the whole difference between matching a test and matching a string.
+  The id appears in the Slice body, in this skill's own review comment, and in any changelog that
+  quotes one; a bare grep over the diff would read a Criterion pasted into a document as proof that
+  the behaviour holds, which is the exact confusion these four states exist to end.
+
+  `CONTRACTS.md` words this as a test that **exists**, and the diff is the right place to look for
+  it because `gh pr diff` spans base to head, so it holds every commit of the Slice, and a Criterion
+  id belongs to exactly one Slice. Where the two readings come apart is a test that already carried
+  the id before this branch. Search the test files for the id when the diff does not have it, and
+  count that as `verified` too: the contract asks whether the behaviour is proven, not who proved it.
 - **The §6 test gate**, as passed, failed (this skill already stopped), or did not run.
 
 | State | When |
 | --- | --- |
-| `verified` | An added line carries the id, **and** the §6 test gate passed |
+| `verified` | An added line **in a test file** carries the id, **and** the §6 test gate passed |
 | `manual` | The Criterion carries `[manual]` |
 | `weak` | Code in the diff appears to implement it, but no added line carries the id |
 | `unverified` | Neither a test carrying the id nor identifiable code in the diff |
@@ -296,7 +312,7 @@ Slice's size, to be fixed in the tracker, not in this PR.
 
 ### AI-discipline pass
 
-Run these inline (not via subagent — they need Slice context). Load patterns from [references/ai-debris.md](references/ai-debris.md):
+Run these inline, not via subagent, since they need Slice context. Load patterns from [references/ai-debris.md](references/ai-debris.md):
 
 - **Scope creep.** Files touched outside the Slice's stated domain (inferred from the issue body + references) → flag.
 - **AI-debris pass.** Walk the diff for each pattern in `references/ai-debris.md` (unrequested defensive code, backwards-compat shims for unused paths, tautological comments, stray TODOs, premature abstractions, mock-only tests, `.skip`/`.only`/`xfail` markers).
@@ -307,7 +323,11 @@ Run these inline (not via subagent — they need Slice context). Load patterns f
 Block if **any** of:
 
 - Any Criterion is `weak` or `unverified`
-- The code-reviewer returned `changes_requested`, or the `code-review` fallback returned Critical or High findings
+- The code-reviewer returned `changes_requested`, or the `code-review` fallback returned Critical or
+  High findings on its **Standards** axis. The fallback stands in for the missing agent, so it gates
+  what that agent gated; letting it only advise would make a repo with no reviewer agent the one
+  place a Critical finding lands silently, which is the gap §9 exists to close. Its **Spec** axis is
+  the drift check and never blocks.
 - Any AI-debris finding is rated blocking
 - Any quality gate failed
 
@@ -351,10 +371,10 @@ Body structure:
 
 ### Criteria
 
-- verified    #60 C1 — `test/loyalty/earn.test.ts:14`, test gate green
-- manual      #60 C2 — check the cart summary renders "240 points"
-- weak        #60 C3 — `src/auth/client.ts:88`, no test carries the id
-- unverified  #60 C4 — no test and no code found
+- verified    #60 C1 - `test/loyalty/earn.test.ts:14`, test gate green
+- manual      #60 C2 - check the cart summary renders "240 points"
+- weak        #60 C3 - `src/auth/client.ts:88`, no test carries the id
+- unverified  #60 C4 - no test and no code found
 
 {when the Slice carries more than ten Criteria:}
 ⚠ {N} Criteria on one Slice. Above ten, a Slice is usually doing too much. Not blocking.
@@ -364,7 +384,7 @@ Body structure:
 
 ### Spec drift (advisory)
 
-- `docs/specs/60-loyalty-earn-and-burn.md` — {behaviour the diff changes} — `path:line`
+- `docs/specs/60-loyalty-earn-and-burn.md`, {behaviour the diff changes}, `path:line`
 - (or "None." / "No implemented Specs match the changed paths.")
 
 ### AI-discipline findings
@@ -418,9 +438,9 @@ Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = the pr
 Review:   {Not blocking | Blocking — see above}
 
 {warnings, one per line, when they apply:}
-⚠ {N} Criteria on one Slice — above ten. Not blocking.
-⚠ The test gate did not run — no Criterion can reach verified.
-⚠ The Slice's Criteria carry no ids — no test can be matched to one.
+⚠ {N} Criteria on one Slice, above ten. Not blocking.
+⚠ The test gate did not run, so no Criterion can reach verified.
+⚠ The Slice's Criteria carry no ids, so no test can be matched to one.
 
 Next: {Share PR URL with reviewers | Fix the items above and re-run /finalize-pr | Mark the PR ready, then share it}
 ```
@@ -436,5 +456,5 @@ tear them down once the PR lands; nothing here should remove either.
 - Don't modify source files. The PR-writer agent may modify the PR body; the AI-discipline pass never touches code.
 - If you stop, surface why and what to run next.
 - A gate that did not run is never reported as a gate that passed. Whether it was a tool the project does not configure or a toolchain this skill does not know, §15 names it.
-- `verified` is the only state that means the behaviour holds. Never report a Criterion verified on diff evidence alone — that is `weak`, and the distinction is the whole point of this skill.
+- `verified` is the only state that means the behaviour holds. Never report a Criterion verified on diff evidence alone: that is `weak`, and the distinction is the whole point of this skill.
 - A GitHub write that returns success is not evidence it took effect. §1, §12 and §14 say what to read back.

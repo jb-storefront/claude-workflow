@@ -114,7 +114,8 @@ committed `permissions.allow`, which is narrow and reviewable, and they keep it.
 **Agents stay with their project.** `/finalize-pr` dispatches a PR-writer and a code-reviewer
 found in the project's own `.claude/agents/`, matched by role rather than filename, because a
 useful reviewer knows the domain (`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). This plugin ships
-no agents; `/finalize-pr` degrades to an inline PR body and a noted gap when a project has none.
+no agents; with none in the project, `/finalize-pr` writes the PR body inline and runs Pocock's
+`code-review` skill in place of the reviewer.
 
 **A GitHub write that returns 2xx is not a GitHub write that happened.** Adding an assignee over
 REST silently ignores users without push access, so `/start-issue` claims its issue and then reads
