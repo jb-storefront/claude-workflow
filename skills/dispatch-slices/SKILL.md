@@ -125,23 +125,38 @@ Skip this for a lone Slice. For every Spec in play:
 
 - **The Spec's Criteria** are the `### C{n}` headings in its `## Criteria` section:
   `grep -oE '^### C[0-9]+' docs/specs/{spec}-{slug}.md`.
-- **The Slices' citations** are the `#{spec} C{n}` ids in each Slice's `## Acceptance criteria`
-  checkboxes: `grep -oE '#[0-9]+ C[0-9]+' <the body>`.
+- **The Slices' citations** are the `#{spec} C{n}` ids under each Slice's `## Acceptance criteria`
+  heading, and nowhere else in the body:
+
+  ```bash
+  gh issue view {n} --json body --jq '.body' \
+    | awk '/^## Acceptance criteria/{f=1;next} /^## /{f=0} f' \
+    | grep -oE '#[0-9]+ C[0-9]+'
+  ```
+
+  The `awk` is the load-bearing half. A Slice's `## What to build` often mentions a neighbouring
+  Criterion in passing, and a `grep` over the whole body would read that mention as ownership —
+  which is the one thing this gate exists to catch.
 
 **Read the citations from every Slice on the Spec issue's task list, not from the dispatchable set.**
-Open, closed, assigned, merged: a Criterion owned by a Slice that landed last week is owned. Reading
-only what §3 left would report every already-built Criterion as orphaned, and the second fan-out of
-a Spec would be the one that could never run.
+Open, closed, assigned, merged: a Criterion owned by a Slice that landed last week is owned, so
+`gh issue view` each entry on the task list rather than reusing what §3 returned. Reading only what
+§3 left would report every already-built Criterion as orphaned, and the second fan-out of a Spec
+would be the one that could never run.
 
-Two gaps, both **stops**:
+Three gaps, all **stops**:
 
 - **A Spec Criterion no Slice cites.** Name the id and its Then clause. Nothing is going to build it,
   and nothing downstream will notice: `/finalize-pr` reports the Criteria a Slice owns, so a
   Criterion no Slice owns is never reported by anybody.
 - **A Slice citation the Spec does not have.** Name the Slice and the citation. This is `#60 C9`
-  against a Spec whose Criteria stop at C7, or `#59 C1` where the Spec is #60 — a typo, a renumber,
+  against a Spec whose Criteria stop at C5, or `#59 C1` where the Spec is #60 — a typo, a renumber,
   or a Slice written against a Spec that has since been edited. `/acceptance-tests` would stop on it
   too, but four sessions later and four worktrees in.
+- **A Criterion two Slices both cite.** Name the id and both Slices. `CONTRACTS.md` makes a Criterion
+  owned by exactly one Slice, and two owners is not twice the safety: both sessions write a test
+  carrying the same id, both PRs claim it verified, and neither reviewer sees the other's. It is also
+  the shape a badly-cut Slice takes, so the fix is usually to the cut rather than to the citation.
 
 A checkbox under `## Acceptance criteria` carrying no `#{spec} C{n}` at all is the second gap in its
 commonest form: `/to-tickets` wrote a plain sentence and nobody added the id. Name the Slice and
@@ -163,12 +178,18 @@ Cited but not in the Spec:
   #63  cites "#60 C9" — the Spec's Criteria end at C5
   #62  "- [ ] Rewards balance renders in the cart summary" — no id
 
-Fix the Slice bodies, or run /anchor-spec 60 to renumber, then dispatch again.
+Owned twice:
+  C1  cited by both #61 and #65
+
+Fix the Slice bodies, then dispatch again.
 ```
 
-The fix is always to the bodies rather than to this skill's reading of them: a Criterion is either
-owned by exactly one Slice or it is not shipping, and that is the whole point of cutting a Spec into
-Slices.
+**The fix is to the Slice bodies, never to the ids.** `CONTRACTS.md` never renumbers a Criterion:
+its id is already cited from a Slice, a test name, and a review comment, so closing a gap by
+renumbering moves the gap somewhere nobody is looking. A Criterion nobody owns gets cited by the
+Slice that should own it, or a new Slice is cut for it, or it is deleted from the Spec and leaves
+its number behind as a gap. A Criterion is either owned by exactly one Slice or it is not shipping,
+and that is the whole point of cutting a Spec into Slices.
 
 ## 5. Classify each Slice: AFK or HITL
 
@@ -204,6 +225,10 @@ anyway:
 One warning per Slice, not one per Criterion: the human needs to know the Slice is worth a second
 look, and three lines saying so about the same Slice is noise, not information.
 
+**The warning is printed in the §6 confirmation, under `Warned:`, in full.** That block is the one
+thing the human reads before approving the fan-out, and a warning that exists only in this skill's
+reasoning is a warning nobody sees.
+
 The warning never changes the classification. That is what makes the rule deterministic: the same
 Slice set classifies the same way on every run, by anyone, with no judgement in the loop. The
 warning is how a missing tag gets noticed; the tag is how it gets fixed.
@@ -220,7 +245,8 @@ Spec:    #60 — Loyalty earn and burn (critiqued → in-progress)
   #62  feat/…  Rewards balance on the cart page    HITL (#60 C2 is [manual])
   #63  feat/…  Reject unregistered client_id       AFK
 
-Warned:  #62 — see above
+Warned:  #62  no [manual] tag, but C2 reads observationally ("renders in the cart summary").
+               Dispatching AFK. Tag the Criterion in the Spec if a person should check it.
 Held:    #64 (blocked by #61)
 Skipped: #59 (assigned), #60 (the Spec issue)
 
@@ -235,8 +261,12 @@ Ask once. After approval, run §7 and §8 for the whole set without further prom
 
 ## 7. Set the Spec's Status to in-progress
 
-Only when the Spec file reads `critiqued`. At `in-progress` it is already right, and at `implemented`
-or `superseded` §2 already warned — do not walk a Status backwards.
+**Once per Spec §2 found, not once per fan-out.** A discovery run can be dispatching Slices from two
+Specs at the same time; each is at its own point in its own lifecycle, and the one that is already
+`in-progress` must not be touched while the other moves.
+
+For each of them: only when its Spec file reads `critiqued`. At `in-progress` it is already right,
+and at `implemented` or `superseded` §2 already warned — do not walk a Status backwards.
 
 Change the one line, commit only that file, and push to the default branch, so that every worktree
 §8 cuts is cut from a Spec that already says work has started:
@@ -252,12 +282,28 @@ Two things can go wrong, and neither holds the fan-out:
 - **The main checkout is not on `{default}`.** Do not commit the Spec onto whatever branch happens
   to be out. Report the edit the founder needs to land and carry on.
 - **The push is rejected.** The default branch is protected — detected here the same way
-  `/anchor-spec` detects it, by being told no. Reset the file, report it, and carry on.
+  `/anchor-spec` detects it, by being told no. Undo the commit before carrying on:
 
-Carrying on is deliberate. No skill gates on `in-progress`: it is a line a reader consults to tell
-whether the file describes the code or an intention, and `/merge-stack` moves it to `implemented`
-from wherever it finds it. Holding five sessions on a one-line status commit would be the gate
-charging rent for something nothing reads.
+  ```bash
+  git reset --keep origin/{default}
+  ```
+
+  `--keep` rather than `--hard`: it aborts on local changes instead of destroying them. Leaving the
+  commit sitting unpushed would be worse than never making it — §1 **stops** on unpushed commits, so
+  the next `/dispatch-slices` on this repo would refuse to run until someone worked out why. If the
+  reset aborts, say so and stop touching git; the founder's tree is theirs.
+
+  Then report the one-line edit the founder should land, and carry on with §8.
+
+Carrying on is deliberate, and it is not because nothing reads the value. `/critique-spec` does:
+`in-progress` is one of the states it refuses to re-critique from. What makes carrying on safe is
+that the state the file is left in — `critiqued` — is *also* one it refuses to run from, so the
+guard holds either way and only the message a founder would see gets worse. `/merge-stack` moves
+the Status to `implemented` from wherever it finds it.
+
+What the founder loses is a line that tells a reader work has started. What they would lose by
+stopping is five ready Slices, held until somebody merges a one-line pull request. Say which line
+needs landing, and dispatch.
 
 ## 8. Dispatch
 
@@ -281,10 +327,9 @@ claude --bg --worktree issue-{n} --dangerously-skip-permissions \
 On a lone Slice, drop the `— refer to the Spec…` clause. The rest is unchanged: a lone Slice numbers
 its own Criteria and `/acceptance-tests` writes them back to the issue body.
 
-The four skills are one chain, not a menu. `/acceptance-tests` is what turns the Slice's Criteria
-into failing tests carrying their ids, and it is the only reason `/finalize-pr` can report a
-Criterion as verified rather than as weak. A session dispatched straight to `/tdd` writes tests named
-whatever it thought of, and arrives at the gate with nothing that matches an id.
+The four skills are one chain, not a menu: a session dispatched straight to `/tdd` skips the step
+that names its tests after Criteria, and arrives at `/finalize-pr` with nothing matching an id. See
+`/acceptance-tests` for why that step is where it is.
 
 **Name every worktree `issue-{n}`.** The mapping from worktree to Slice has to be mechanical,
 because `/merge-stack` and `/merge-pr` both need to find a branch's worktree later and there is
