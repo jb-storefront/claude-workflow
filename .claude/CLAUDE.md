@@ -1,3 +1,8 @@
+## Artifact contracts
+
+The shape of every artifact the workflow reads and writes, in one place: `CONTRACTS.md` at the repo
+root. Read it before hand-writing or parsing a Spec file, a Spec issue body, or a Slice body.
+
 ## Agent skills
 
 ### Issue tracker
