@@ -354,14 +354,13 @@ what "verified" used to mean and is why these four states exist.
 
 `/finalize-pr` blocks on any `unverified`, in every repository, and never blocks on `manual`.
 
-`weak` blocks only where a **test Seam** exists: where the toolchain `/finalize-pr` detects exposes a
-runnable test command, so a test name carrying a Criterion's id is something the repository can
-actually collect. Where none does, `weak` is the best state any Criterion can reach, and blocking
-there would make every pull request unmergeable forever rather than asking the author for anything.
+`weak` blocks only where a **test Seam** exists: where the toolchain `/finalize-pr` detects exposes
+a runnable test command, so there is a test the author could have written and did not. Where none
+does, `/finalize-pr` has no test command to hold a Criterion to, and blocking would make every pull
+request unmergeable forever rather than asking the author for anything.
 
-The Criterion is still reported as `weak` either way. What the test Seam changes is what `weak`
-costs, never what it is called, and the review comment names which of the two rules it applied and
-why, so a reader is never guessing which standard was used.
+The Criterion is still reported as `weak` either way. The test Seam changes what `weak` costs, never
+what it is called, and the review comment names which of the two rules applied and why.
 
 Red-before-green ordering is not checked. A test carrying the id and a green gate is the whole
 contract.
