@@ -1,6 +1,6 @@
 ---
 name: dispatch-slices
-description: Fan out unblocked Slices to parallel local Claude Code sessions, one git worktree per Slice. Refuses a Spec still at draft or whose Criteria are not all owned by a Slice, classifies a Slice as needing a person only from `[manual]` tags, sets the Spec to in-progress at the first fan-out, then dispatches each session through /start-issue, /acceptance-tests, /tdd and /finalize-pr. Use when the user says "/dispatch-slices", "start the next slices", "work these issues in parallel", or has just finished /to-tickets.
+description: Fan out unblocked Slices to parallel local Claude Code sessions, one git worktree per Slice. Refuses a Spec still at draft or whose Criteria are not all owned by a Slice, treats every Slice as a lone Slice in a repo whose per-repo workflow file says `**Specs:** off`, classifies a Slice as needing a person only from `[manual]` tags, sets the Spec to in-progress at the first fan-out, then dispatches each session through /start-issue, /acceptance-tests, /tdd and /finalize-pr. Use when the user says "/dispatch-slices", "start the next slices", "work these issues in parallel", or has just finished /to-tickets.
 ---
 
 # Dispatch Slices
@@ -16,7 +16,9 @@ dispatched session runs `/start-issue`, then `/acceptance-tests`, then `/tdd`, t
 Two gates stand in front of the fan-out, and both are about the Spec rather than about any one
 Slice. A Spec nobody doubted does not get built (§2). A Spec whose Criteria are not all owned does
 not get built either, because the unowned ones are what quietly never ship (§4). A repository that
-keeps no Specs at all passes both: there is nothing to doubt and nothing to own.
+keeps no Specs at all passes both: there is nothing to doubt and nothing to own. Such a repository
+says so once, with `**Specs:** off` in its per-repo workflow file, and both gates go quiet for it
+(§2).
 
 Artifact shapes — the Spec file, the Spec issue body, the Slice body, the Criterion grammar — are in
 `CONTRACTS.md` at the repo root. This skill reads them; it does not restate them.
@@ -53,6 +55,21 @@ State the base branch and sha in §6 so the user approving the fan-out can see e
 session will start from.
 
 ## 2. Find the Spec and read its Status
+
+**Read the repository's declaration first.** `docs/agents/workflow.md` may carry a `**Specs:**`
+line; `CONTRACTS.md` describes it. Absent, or `on`, means the rest of this section applies. `off`
+means the repository keeps no Specs, and every Slice in the set is a lone Slice whatever its
+`## Parent` names: this section reads no Spec file, §4 and §7 do not run, §6 names the declaration
+once in place of a `Spec:` line, and §8 drops the Spec clause from every prompt. Nothing warns
+about an absent Spec file, because the repository has declared it will never have one. Read the
+value from the file on the default branch, once per run.
+
+```bash
+grep -E '^\*\*Specs:\*\*' docs/agents/workflow.md
+```
+
+Any value other than `off` is read as `on`, so a typo turns the gates on rather than off. Say so
+in §6 when the line carries a value that is neither.
 
 **Which Spec.** With a Spec issue given, that is it. Without one, read each candidate Slice's
 `## Parent` section: a Slice that names a Spec issue is governed by that Spec, and a Slice that
@@ -291,6 +308,14 @@ Warned:  #60  no Spec file at docs/specs/60-*.md. Coverage not checked, Status n
               /anchor-spec 60 if this repo does keep Specs.
 ```
 
+Under `**Specs:** off` the block carries no `Spec:` line, no Status transition and no coverage
+count, and no `Warned:` entry about any Spec file. In their place, one line, however many Slices
+name a `## Parent`:
+
+```
+Specs:   off, per docs/agents/workflow.md; every Slice dispatches as a lone Slice
+```
+
 Ask once. After approval, run §7 and §8 for the whole set without further prompting.
 
 ## 7. Set the Spec's Status to in-progress
@@ -363,7 +388,8 @@ claude --bg --worktree issue-{n} --dangerously-skip-permissions \
 On a lone Slice, drop the `— refer to the Spec…` clause. The rest is unchanged: a lone Slice numbers
 its own Criteria and `/acceptance-tests` writes them back to the issue body. Drop it on a Slice whose
 Spec file §2 found missing too — pointing a session at a Spec issue whose file is not on the default
-branch sends it looking for Criteria that are not there.
+branch sends it looking for Criteria that are not there. Under `**Specs:** off`, drop it on every
+Slice, for the same reason.
 
 The four skills are one chain, not a menu: a session dispatched straight to `/tdd` skips the step
 that names its tests after Criteria, and arrives at `/finalize-pr` with nothing matching an id. See
@@ -453,6 +479,7 @@ it for a session that ran one command. It is for a human to look at, not for an 
 - Dispatch only; never build a Slice in this session.
 - Never dispatch a Spec at Status `draft`. There is no override here — `/anchor-spec --skip-critique "<reason>"` is the recorded way past the Critique gate, and it is recorded in the Spec.
 - A Spec with no file warns rather than stops: its Slices dispatch as lone Slices do, §4 does not run for it, and §7 writes no Status. One warning per absent Spec, however many Slices name it.
+- `**Specs:** off` in the per-repo workflow file makes every Slice a lone Slice: no Status gate, no coverage check, no Status written, no warning about a Spec file, and the declaration named once in §6. Absent means `on`.
 - Never dispatch a Spec whose Criteria are not all owned by exactly one Slice, in either direction. Report every gap at once.
 - Classify HITL from `[manual]` tags and from nothing else. Never from a label, never from wording, and never by asking — the tag is the answer.
 - Warn at most once per Slice about observational Criteria carrying no tag, and dispatch it AFK regardless.

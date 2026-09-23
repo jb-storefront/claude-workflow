@@ -76,6 +76,13 @@ an agent that writes PR descriptions, one that reviews code, and one that writes
 has a domain-taught reviewer under some other name **has that role covered**, and this skill must
 not hand it a generic template.
 
+**Whether the repo has a test Seam.** A lockfile at the repo root from the table `/finalize-pr`
+detects toolchains by: `bun.lockb`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `uv.lock`.
+This decides the value the draft proposes for the workflow file's `**Specs:**` line, and only that.
+A repo with no test Seam cannot verify a Spec's Criteria, so a Spec anchored for it is a file
+nothing can check; the draft proposes `off` there and `on` everywhere else. The user sees the
+proposal in §2 before anything is written, and the file is theirs to edit afterwards.
+
 **Three third-party dependencies, checked and never installed**
 
 - **Pocock's skills.** Installed: `claude plugin list` mentions `mattpocock-skills`. Setup has run:
@@ -104,7 +111,7 @@ Print one block per artifact, in the order of §3, each marked with what will ha
   write    .worktreeinclude           + .env, + .env.local
   merge    .claude/settings.json      + extraKnownMarketplaces.jb-workflow, + 2 enabledPlugins
   write    docs/specs/.gitkeep        new
-  write    docs/agents/workflow.md    new (3 critics: codex, google, claude)
+  write    docs/agents/workflow.md    new (Specs: on, has a test Seam; 3 critics: codex, google, claude)
   copy     .claude/agents/            + pr-writer.md, + test-writer.md
   skip     .claude/agents/            code-reviewer: ucp-demo-code-reviewer.md covers the role
   append   CLAUDE.md                  + ## Slice workflow
@@ -210,19 +217,28 @@ only on this machine is not in the worktrees that `/anchor-spec` and every Slice
 and those are cut from the remote default branch.
 
 **5. Write the per-repo workflow file.** `docs/agents/workflow.md`, beside Pocock's
-`issue-tracker.md`, `triage-labels.md` and `domain.md`. One ordered list, and nothing else:
+`issue-tracker.md`, `triage-labels.md` and `domain.md`. Two settings, and nothing else; `CONTRACTS.md`
+describes both:
 
 ```markdown
+**Specs:** on
+
 **Critics:**
 1. codex, default
 2. google, gemini-3.8-flash-high
 3. claude, claude-opus-5
 ```
 
-`/critique-spec` reads it; nothing else does, and nothing in it is loaded into a session's context.
-It walks the list in order and runs the first entry that can actually produce a Critique on this
-machine. Changing the critics, or their order, is an edit to this file and not a release of this
-plugin, so say so in §4.
+Nothing in it is loaded into a session's context. `/critique-spec` reads the Critics list, walking
+it in order and running the first entry that can actually produce a Critique on this machine.
+`/dispatch-slices`, `/acceptance-tests` and `/finalize-pr` read the Specs line. Changing either is
+an edit to this file and not a release of this plugin, so say so in §4.
+
+**The Specs value is the one §1 chose**: `on` when the repo has a test Seam, `off` when it has none.
+Absent means `on`, so the line is written even when it says `on`: it is where the next reader learns
+the setting exists. `off` turns every Spec gate off for the repo and makes every Slice a lone
+Slice; it does not skip the tests, because `/finalize-pr` holds a lone Slice to its own Criteria.
+Name the value and the reason in §2 and §4.
 
 **Write all three entries even when the CLIs are missing.** An entry costs nothing when its vendor
 is absent — `/critique-spec` skips it and moves on — and a user who installs Codex or Antigravity
@@ -243,7 +259,8 @@ the default here because a Critique is a read-and-report job.
 
 If the file already exists, leave it **completely alone**, whatever vendors and models it names, as
 long as its last entry is a `claude` one. The user's choice of critics is the whole reason this file
-exists.
+exists. That includes a file with no `**Specs:**` line: absent means `on`, and adding the line to
+someone's file is an edit they did not ask for.
 
 A file in the superseded two-line shape, `**Critic:**` and `**Fallback:**`, is the one exception.
 Offer to rewrite it as the list its two lines already encode, keeping both vendors and both models
@@ -304,7 +321,7 @@ Repo:      {owner}/{repo} on {default branch}
   {written | unchanged | not needed}  .worktreeinclude    {paths, or "no gitignored .env files"}
   {merged | unchanged}   .claude/settings.json   marketplace + 2 plugins
   {created | unchanged}  docs/specs/
-  {written | unchanged}  docs/agents/workflow.md critics: codex → google → claude
+  {written | unchanged}  docs/agents/workflow.md Specs: {on | off} ({has | no} test Seam); critics: codex → google → claude
   {copied | unchanged}   .claude/agents/         {files, or which existing agent covers each role}
   {appended | unchanged} {CLAUDE.md}             ## Slice workflow
 
@@ -379,7 +396,7 @@ configured is not the one doubting their Spec. Say so once: an installed CLI is 
 present, and only a real Critique proves it is signed in.
 
 Close with: re-running `/setup-workflow` is safe and reports `unchanged` for everything already
-done. Changing the critics, or their order, is an edit to `docs/agents/workflow.md`.
+done. Changing the critics, their order, or the Specs value is an edit to `docs/agents/workflow.md`.
 
 ## Rules
 
