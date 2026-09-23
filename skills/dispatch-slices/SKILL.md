@@ -15,7 +15,8 @@ dispatched session runs `/start-issue`, then `/acceptance-tests`, then `/tdd`, t
 
 Two gates stand in front of the fan-out, and both are about the Spec rather than about any one
 Slice. A Spec nobody doubted does not get built (§2). A Spec whose Criteria are not all owned does
-not get built either, because the unowned ones are what quietly never ship (§4).
+not get built either, because the unowned ones are what quietly never ship (§4). A repository that
+keeps no Specs at all passes both: there is nothing to doubt and nothing to own.
 
 Artifact shapes — the Spec file, the Spec issue body, the Slice body, the Criterion grammar — are in
 `CONTRACTS.md` at the repo root. This skill reads them; it does not restate them.
@@ -65,11 +66,11 @@ the Status this gate reads is the file's and never the issue's.
 
 | What the Spec file says | What to do |
 | --- | --- |
-| The file does not exist | **Stop.** The Spec was never anchored |
 | `**Status:** draft` | **Stop.** Nobody has doubted this Spec |
 | `**Status:** critiqued` | Proceed. This is the first fan-out; §7 applies |
 | `**Status:** in-progress` | Proceed. A fan-out already happened; §7 leaves the file alone |
 | `**Status:** implemented` or `superseded` | **Warn**, and name it in the §6 confirmation |
+| The file does not exist | **Warn**, and name it in the §6 confirmation. §4 and §7 do not run |
 
 A stop names the Spec, the Status, and the command that clears it:
 
@@ -88,14 +89,33 @@ Or, when the Spec is small enough that the gate is not worth it:
   /anchor-spec 60 --skip-critique "<reason>"
 ```
 
-A missing file stops for the stronger version of the same reason: there is no Status, no Criteria to
-own, and nothing for a session to read, because a worktree cut from the remote default branch can
-see committed files and nothing else. Say `/anchor-spec {spec}` and stop. Do not fall back to the
-Spec issue body — a gate that a deleted file opens is not a gate.
+The two outcomes above are not alike, and the difference is the whole point of the gate:
 
-`implemented` and `superseded` are warnings rather than stops because both have honest readings: a
-follow-up Slice on a landed Spec, or a Slice being finished on a Spec that a later one replaced.
-Name it and let the human decide at §6.
+- **A `draft` Spec file** means somebody started the process and skipped the doubt step. Worth
+  blocking, and it stays a stop.
+- **No Spec file at all** means the process was never started here. Nothing was skipped, so there is
+  nothing to catch.
+
+A repository that keeps no Specs is one this workflow already blesses: that is the lone Slice above,
+exempt from this section and from §4. The same repository, with the same absence of a Spec, must not
+become undispatchable because a Slice happens to name its parent. So a missing file warns, and the
+Slices that name it dispatch the way a lone Slice does.
+
+Two consequences follow, and both are silences rather than extra work. §4 has no Criteria to read
+and does not run for that Spec — a run that warned about a missing Spec and then stopped on forty
+uncited Criteria would have gained nothing. §7 has no file to write a Status into and touches the
+default branch not at all.
+
+**Warn once per absent Spec, not once per Slice naming it.** The human needs to know the Spec is
+missing; three lines saying so about the same Spec is noise.
+
+Do not fall back to the Spec issue body for a Status. The body is not the Spec, `CONTRACTS.md` makes
+the file win, and a Status read from a body is a gate that anyone can open by editing an issue. An
+absent file has no Status, which is exactly why this row warns instead of choosing one.
+
+`implemented` and `superseded` are warnings rather than stops for a different reason: both have
+honest readings — a follow-up Slice on a landed Spec, or a Slice being finished on a Spec that a
+later one replaced. Name it and let the human decide at §6.
 
 ## 3. Collect the Slice set
 
@@ -121,7 +141,9 @@ If the set is empty, report why per issue and stop.
 
 ## 4. Check that every Criterion is owned
 
-Skip this for a lone Slice. For every Spec in play:
+Skip this for a lone Slice, and for a Spec §2 found no file for: the Criteria this section compares
+against live in that file, and there is no second copy to fall back to. For every remaining Spec in
+play:
 
 - **The Spec's Criteria** are the `### C{n}` headings in its `## Criteria` section:
   `grep -oE '^### C[0-9]+' docs/specs/{spec}-{slug}.md`.
@@ -203,7 +225,8 @@ One rule, and it is the whole rule:
 Read the tag from the **Spec file**, for each id the Slice cites: `grep -E '^### C[0-9]+ \[manual\]'`
 on the `## Criteria` section. The Slice body repeats the tag and the Spec issue body repeats it
 again, and either copy can be stale; the file wins. A lone Slice has no file, so its own checkboxes
-are the Criteria and the tag is read from them.
+are the Criteria and the tag is read from them. A Slice whose Spec file §2 found missing is read the
+same way, for the same reason: there is no file to win.
 
 **Nothing else classifies.** Not labels — `ui`, `ux` and `demo` on an issue mean nothing here. Not
 wording — a Criterion phrased as what a person sees is still AFK when it carries no tag. The
@@ -257,6 +280,17 @@ Action:  set the Spec to in-progress on {default}, then one background session p
 Proceed?
 ```
 
+An absent Spec file changes two lines of that block and nothing else. Its `Spec:` line carries
+neither a Status transition nor a coverage count, since both are read from the file, and it gets one
+`Warned:` entry however many of the Slices below name it:
+
+```
+Spec:    #60 — no Spec file on {default}; dispatching its Slices as lone Slices
+
+Warned:  #60  no Spec file at docs/specs/60-*.md. Coverage not checked, Status not written.
+              /anchor-spec 60 if this repo does keep Specs.
+```
+
 Ask once. After approval, run §7 and §8 for the whole set without further prompting.
 
 ## 7. Set the Spec's Status to in-progress
@@ -266,7 +300,9 @@ Specs at the same time; each is at its own point in its own lifecycle, and the o
 `in-progress` must not be touched while the other moves.
 
 For each of them: only when its Spec file reads `critiqued`. At `in-progress` it is already right,
-and at `implemented` or `superseded` §2 already warned — do not walk a Status backwards.
+and at `implemented` or `superseded` §2 already warned — do not walk a Status backwards. A Spec §2
+found no file for is skipped outright: no line to change, nothing to commit, nothing to push, and
+the default branch left exactly as §1 found it.
 
 Change the one line, commit only that file, and push to the default branch, so that every worktree
 §8 cuts is cut from a Spec that already says work has started:
@@ -325,7 +361,9 @@ claude --bg --worktree issue-{n} --dangerously-skip-permissions \
 ```
 
 On a lone Slice, drop the `— refer to the Spec…` clause. The rest is unchanged: a lone Slice numbers
-its own Criteria and `/acceptance-tests` writes them back to the issue body.
+its own Criteria and `/acceptance-tests` writes them back to the issue body. Drop it on a Slice whose
+Spec file §2 found missing too — pointing a session at a Spec issue whose file is not on the default
+branch sends it looking for Criteria that are not there.
 
 The four skills are one chain, not a menu: a session dispatched straight to `/tdd` skips the step
 that names its tests after Criteria, and arrives at `/finalize-pr` with nothing matching an id. See
@@ -413,7 +451,8 @@ it for a session that ran one command. It is for a human to look at, not for an 
 ## Rules
 
 - Dispatch only; never build a Slice in this session.
-- Never dispatch a Spec at Status `draft`, or one with no Spec file. Neither has an override here — `/anchor-spec --skip-critique "<reason>"` is the recorded way past the Critique gate, and it is recorded in the Spec.
+- Never dispatch a Spec at Status `draft`. There is no override here — `/anchor-spec --skip-critique "<reason>"` is the recorded way past the Critique gate, and it is recorded in the Spec.
+- A Spec with no file warns rather than stops: its Slices dispatch as lone Slices do, §4 does not run for it, and §7 writes no Status. One warning per absent Spec, however many Slices name it.
 - Never dispatch a Spec whose Criteria are not all owned by exactly one Slice, in either direction. Report every gap at once.
 - Classify HITL from `[manual]` tags and from nothing else. Never from a label, never from wording, and never by asking — the tag is the answer.
 - Warn at most once per Slice about observational Criteria carrying no tag, and dispatch it AFK regardless.
