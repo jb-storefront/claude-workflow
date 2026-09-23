@@ -53,6 +53,11 @@ words, not synonyms invented at the keyboard.
 A Slice checkbox carries an id and a summary. The Given/When/Then the test has to assert lives
 somewhere else, and the summary is not enough to write an assertion from.
 
+**In a repo whose `docs/agents/workflow.md` carries `**Specs:** off`**, read `## Parent` as absent
+and take the lone-Slice path below. `CONTRACTS.md` describes the line, and absent means `on`. Such a
+repo has declared it keeps no Specs, so a Parent there is a tracker reference and not a Spec, and
+stopping on the Spec file it does not have would make every Slice in the repo unstartable.
+
 **With a `## Parent`.** The Slice cites a Spec:
 
 - The Spec file is `docs/specs/{parent-number}-{slug}.md` on the default branch. Find it with

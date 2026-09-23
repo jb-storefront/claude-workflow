@@ -373,14 +373,41 @@ Above ten Criteria on one Slice, `/finalize-pr` warns. It never blocks on the co
 docs/agents/workflow.md
 ```
 
-Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. One ordered list, and nothing else:
+Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. Two settings, each one line or one
+list, and nothing else:
 
 ```markdown
+**Specs:** on
+
 **Critics:**
 1. codex, default
 2. google, gemini-3.8-flash-high
 3. claude, claude-opus-5
 ```
+
+### The Specs line
+
+Whether this repository keeps Specs at all. Two values:
+
+| Value | Meaning |
+| --- | --- |
+| `on` | The Spec half of the workflow runs: `/dispatch-slices` reads each Spec file, gates on its Status and checks that every Criterion is owned |
+| `off` | The repository keeps no Specs. Every Slice is a lone Slice, whatever its `## Parent` says |
+
+**Absent means `on`.** A file written before this line existed, or a repository that never edited
+it, keeps today's behaviour without touching the file.
+
+`off` is a declaration about the repository, not about one run: it is true every time, and it lives
+in a file a reviewer sees in a diff. Under it, every skill that reads `## Parent` reads it as absent.
+`/dispatch-slices` runs no Status gate, no coverage check, writes no Status, and warns about no
+missing Spec file; it names the declaration once in its confirmation instead. `/acceptance-tests`
+and `/finalize-pr` number and report the Slice's own Criteria exactly as they do for a lone Slice,
+under the same four states. Skipping the Spec is not a way to skip the tests.
+
+The line switches the Spec gates off wholesale for a repository that has none. It does not let a
+repository that does keep Specs choose which gates bind. That would be a mode, and there is none.
+
+### The Critics list
 
 Each entry is `{vendor}, {model}`. `/critique-spec` walks the list in order and runs the first entry
 that can actually produce a Critique on this machine: an entry whose tooling is absent is skipped,
@@ -408,9 +435,10 @@ The vendors `/critique-spec` knows how to dispatch, and what each needs before i
 Adding a vendor the table does not list is not a matter of editing this file: `/critique-spec` stops
 on a vendor it has no dispatch path for rather than guessing one.
 
-Written by `/setup-workflow`, read by `/critique-spec`, and by nothing else. Changing the critics, or
-their order, is an edit to this file and not a release of the plugin. There is no mode line and no
-gate switch here: which gates block is not per-repo configuration.
+Written by `/setup-workflow`. The Critics list is read by `/critique-spec` and by nothing else; the
+Specs line is read by `/dispatch-slices`, `/acceptance-tests` and `/finalize-pr`. Changing either
+is an edit to this file and not a release of the plugin. There is no mode line here: a repository
+that keeps Specs cannot choose which of its gates block.
 
-Nothing in this file is loaded into a session's context. It is read on demand by the one skill that
-needs it.
+Nothing in this file is loaded into a session's context. Each line is read on demand by the skills
+that need it.

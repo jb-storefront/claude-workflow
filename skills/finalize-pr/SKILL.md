@@ -79,6 +79,11 @@ When `## Parent` names a Spec issue, find `docs/specs/{spec_issue}-*.md` on this
 **The file wins.** When the Spec file and the Slice checkbox disagree on a Criterion's text or its
 `[manual]` tag, the file is right and the checkbox is stale.
 
+When `docs/agents/workflow.md` carries `**Specs:** off`, the repository keeps no Specs, and
+`## Parent` is read as absent: no Spec file is looked for, nothing is noted, and the Slice is a lone
+Slice whose checkboxes are its Criteria. `CONTRACTS.md` describes the line; absent means `on`. The
+four states, the gate, and the block on `unverified` are the same either way.
+
 No Spec file for a named Parent → note it once and fall back to the checkbox text, as for a lone
 Slice. A Parent pointing at a Spec nobody anchored is worth saying out loud; it is not worth
 stopping for.
@@ -490,7 +495,7 @@ PR:       #{pr_number} — {pr_title}
 URL:      {pr_url}
 Branch:   {branch}
 Slice:    #{issue_number}
-Spec:     {docs/specs/60-….md | lone Slice, no Spec | #60 named, no Spec file found}
+Spec:     {docs/specs/60-….md | lone Slice, no Spec | #60 named, no Spec file found | Specs off, per docs/agents/workflow.md}
 Criteria: {V} verified, {W} weak, {M} manual, {U} unverified   (of {N})
 Worktree: {path}
 

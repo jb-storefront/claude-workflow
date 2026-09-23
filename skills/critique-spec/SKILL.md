@@ -54,7 +54,8 @@ alongside the Spec edit.
 
 ## 2. Read the Critics list from the per-repo workflow file
 
-`docs/agents/workflow.md` holds one ordered list and nothing else:
+`docs/agents/workflow.md` holds the ordered list this skill reads, and a `**Specs:**` line it does
+not; `CONTRACTS.md` describes both. Read the list, ignore the rest:
 
 ```markdown
 **Critics:**
