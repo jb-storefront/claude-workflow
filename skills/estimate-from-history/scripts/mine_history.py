@@ -29,7 +29,7 @@ query($owner:String!,$name:String!,$cursor:String){
         number title createdAt mergedAt additions deletions changedFiles
         labels(first:20){nodes{name}}
         closingIssuesReferences(first:5){nodes{number}}
-        commits(first:100){nodes{commit{committedDate messageHeadline}}}
+        commits(first:100){nodes{commit{committedDate authoredDate messageHeadline}}}
       }
     }
   }
@@ -69,6 +69,11 @@ def ts(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def authored(commit):
+    """When the commit was written. Survives rebase; committedDate does not."""
+    return commit.get("authoredDate") or commit["committedDate"]
+
+
 def count_checkboxes(body):
     return len(re.findall(r"^\s*[-*]\s*\[[ xX]\]", body or "", re.M))
 
@@ -94,9 +99,11 @@ def pct(vals, p):
 
 def analyse_pr(pr, start_re, gap_cap, rebase_window):
     """Reconstruct one PR's effort. Returns a record, possibly marked unusable."""
-    commits = sorted((c["commit"] for c in pr["commits"]["nodes"]),
-                     key=lambda c: c["committedDate"])
-    times = [ts(c["committedDate"]) for c in commits]
+    # Author dates, not committer dates. A rebase rewrites every committer date
+    # to the rebase moment and leaves author dates alone, so reading committer
+    # dates discards every PR that was rebased before merge.
+    commits = sorted((c["commit"] for c in pr["commits"]["nodes"]), key=authored)
+    times = [ts(authored(c)) for c in commits]
     merged = ts(pr["mergedAt"])
 
     rec = {
@@ -126,10 +133,11 @@ def analyse_pr(pr, start_re, gap_cap, rebase_window):
 
     rec["span_minutes"] = round((merged - times[0]).total_seconds() / 60, 1)
 
-    # A rebase or squash rewrites every committedDate to the rewrite moment,
-    # which would otherwise read as "12 commits of work in 40 seconds".
+    # Author dates survive a rebase, so this now catches only the genuine case:
+    # a branch whose commits really were all written within a few minutes, or
+    # one rewritten by something that reset authorship too.
     if len(times) >= 2 and (times[-1] - times[0]) < timedelta(minutes=rebase_window):
-        rec["excluded"] = "rebased or squashed (commit timestamps collapsed)"
+        rec["excluded"] = "author timestamps collapsed"
         return rec
 
     # Gap-capped active time: sum the intervals between commits, treating any
@@ -152,7 +160,7 @@ def main():
     ap.add_argument("--gap-cap", type=float, default=45.0,
                     help="minutes; a longer gap between commits counts as away, not working")
     ap.add_argument("--rebase-window", type=float, default=10.0,
-                    help="minutes; multi-commit PRs spanning less than this are treated as rebased")
+                    help="minutes; multi-commit PRs authored within less than this are discarded")
     ap.add_argument("--start-marker", default=r"start work on #(\d+)",
                     help="regex with one capture group for the issue number")
     args = ap.parse_args()

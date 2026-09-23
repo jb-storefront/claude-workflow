@@ -96,10 +96,14 @@ The miner assumes nothing except merged PRs. Two things sharpen it:
   written by the `/start-issue` skill. Override with `--start-marker`. Without
   one it falls back to the first commit on the branch and GitHub's closing
   reference, which is looser but still works.
-- Squash-on-merge destroys the timing signal. The miner detects and excludes
-  those PRs rather than reading them as one-minute slices. If a repo squashes
-  everything, this skill has nothing to measure. Say so rather than inventing
-  numbers.
+- Squash-on-merge is fine and needs no accommodation. GitHub keeps the PR's
+  branch commits after a squash, and the miner reads those, not the merge
+  commit. Do not recommend changing a repo's merge policy for this skill's
+  benefit.
+- The miner reads author dates, which survive a rebase. Committer dates do not:
+  a rebase-before-merge rewrites every one of them to the rebase moment, which
+  is what a collapsed PR usually means. If PRs are still being excluded, they
+  were rewritten by something that reset authorship too.
 
 Tuning knobs: `--gap-cap` (default 45 min; a longer gap between commits counts
 as away rather than working) and `--rebase-window` (default 10 min).
