@@ -138,6 +138,35 @@ Any failure → **stop** with the error output. Re-running after fixes is idempo
 Record the outcome as one of **passed**, **failed**, or **did not run**. §10 reads it, and the three
 are not interchangeable there.
 
+### Is there a test Seam?
+
+Record this as well, as **present** or **absent**, with the reason. It is a fact about the
+repository rather than about this PR, and §11 reads it to decide what a `weak` Criterion costs.
+
+Determine it from the toolchain §5 detected. Do this on every run, including the runs where the CI
+branch below short-circuits the local one — CI proving the tests green says nothing about whether a
+test command exists for a test name to be collected by, and those are the two different questions:
+
+| Toolchain §5 detected | Test Seam is present when |
+| --- | --- |
+| Node (`bun`, `pnpm`, `npm`, `yarn`) | `package.json` declares a `test` script |
+| `uv` | `pyproject.toml` has `[tool.pytest.ini_options]` |
+| none — no lockfile matched §5's table | never |
+
+Nothing new to configure and nothing to keep in sync. This reads the same `package.json` and
+`pyproject.toml` lines that §5 and the local branch below already read.
+
+Record **why** it is absent, because the two reasons are different problems and only one of them is
+the author's to fix:
+
+- `{pm}`/`uv` detected but no test command declared — the repository has a toolchain and has not
+  told it how to run tests.
+- no lockfile matched — this skill does not recognise the toolchain, so a repository that does run
+  tests somewhere this skill cannot see reads here as one that does not run them at all. Name what
+  was found at the root, the same as §5 does.
+
+`weak` blocks only where the Seam is present. §11 states that rule and §13 prints it.
+
 If `.github/workflows/` exists with at least one workflow file that runs the project's automated
 checks:
 
@@ -298,6 +327,12 @@ point of the state.
 Red-before-green ordering is not checked. A test carrying the id and a green gate is the whole
 contract.
 
+**The four states do not depend on the test Seam.** A Criterion with code and no test carrying its
+id is `weak` in every repository, whether or not §6 found a runnable test command. §11 decides what
+`weak` costs; §10 only decides what is true. Never promote a `weak` Criterion to `verified` because
+no test could have carried its id — the state is the one thing telling the reader that the behaviour
+was not proven, and a repository that cannot prove it needs that said louder, not quieter.
+
 **A test gate that did not run puts `verified` out of reach.** Every Criterion that would otherwise
 have been verified is `weak`, and the evidence line reads `test gate did not run`, never `no test
 carries the id`. Those are different failures and only one of them is the author's to fix. §5 and §6
@@ -322,7 +357,11 @@ Run these inline, not via subagent, since they need Slice context. Load patterns
 
 Block if **any** of:
 
-- Any Criterion is `weak` or `unverified`
+- Any Criterion is `unverified`. Everywhere, in every repository, with no exception below. Nothing
+  at all is different in kind from the best a repository can do, and keeping this rule absolute is
+  what stops the one below it becoming a way to skip evidence.
+- Any Criterion is `weak`, **and §6 found the test Seam present**. There, a test could have carried
+  the id and nobody wrote it, which is the block this skill was built for.
 - The code-reviewer returned `changes_requested`, or the `code-review` fallback returned Critical or
   High findings on its **Standards** axis. The fallback stands in for the missing agent, so it gates
   what that agent gated; letting it only advise would make a repo with no reviewer agent the one
@@ -338,6 +377,16 @@ Never block on:
 - A spec-drift finding. It is a question for the human, and the heuristic that raised it
   over-selects by design.
 - More than ten Criteria. That is a warning.
+- A `weak` Criterion where §6 found **no test Seam**. There, `weak` is the ceiling: no test command
+  exists for a test name to be collected by, so every Criterion in the repository lands on `weak` and
+  a block asks the author for something the repository cannot give. It is still reported as `weak`
+  (§10), and §13 names this rule and the reason the Seam is absent.
+
+**Why the `weak` block is conditional.** A gate that fires on every pull request in a repository
+that cannot possibly clear it is not a gate. It is a step people learn to write "Not blocking" past,
+and once that habit exists the gate means nothing on the pull request where it was right. Narrowing
+it to repositories that can clear it keeps the signal, and it costs nothing where a test Seam
+exists, which is where the gate was doing the work.
 
 Blocking is not a dead end. The PR stays a draft, the review comment says which Criterion sits in
 which state and on what evidence, and the author either writes the test that carries the id or takes
@@ -382,6 +431,12 @@ Body structure:
 {when the §6 test gate did not run:}
 ⚠ The test gate did not run, so no Criterion can reach verified.
 
+{always, exactly one of these two, naming the rule §11 applied and why:}
+Rule: `weak` blocks. This repository has a test Seam ({what declares it}), so a test could carry a
+Criterion's id.
+Rule: `weak` does not block. This repository has no test Seam ({the §6 reason}), so `weak` is the
+best state a Criterion can reach here. `unverified` still blocks.
+
 ### Spec drift (advisory)
 
 - `docs/specs/60-loyalty-earn-and-burn.md`, {behaviour the diff changes}, `path:line`
@@ -401,6 +456,10 @@ Full report posted as a separate PR comment.
 
 Every Criterion the Slice owns appears in `### Criteria` with exactly one state and its evidence.
 A Criterion with no state is a bug in §10, not a Criterion to leave out.
+
+The `Rule:` line is not conditional. Both repositories print it, because a reader of a review that
+passed and a reader of a review that blocked are owed the same answer to the same question: which
+standard was this held to, and why that one.
 
 Then post the full code-reviewer report as a separate PR comment: `gh pr comment {pr_number} --body @-` (keeps the review compact).
 
@@ -435,6 +494,7 @@ Criteria: {V} verified, {W} weak, {M} manual, {U} unverified   (of {N})
 Worktree: {path}
 
 Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = the project does not configure it)
+Seam:     {present ({what declares it}) — `weak` blocks | absent ({the §6 reason}) — `weak` does not block}
 Review:   {Not blocking | Blocking — see above}
 
 {warnings, one per line, when they apply:}
@@ -457,4 +517,6 @@ tear them down once the PR lands; nothing here should remove either.
 - If you stop, surface why and what to run next.
 - A gate that did not run is never reported as a gate that passed. Whether it was a tool the project does not configure or a toolchain this skill does not know, §15 names it.
 - `verified` is the only state that means the behaviour holds. Never report a Criterion verified on diff evidence alone: that is `weak`, and the distinction is the whole point of this skill.
+- `weak` is reported as `weak` in every repository. The test Seam changes what `weak` costs in §11, never what §10 calls it.
+- `unverified` blocks everywhere. No test Seam is a reason to hold `weak` to a lower bar; it is never a reason to accept a Criterion with no evidence at all.
 - A GitHub write that returns success is not evidence it took effect. §1, §12 and §14 say what to read back.

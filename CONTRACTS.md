@@ -350,8 +350,18 @@ Shape in the comment:
 ```
 
 **verified is the only state that means the behaviour holds.** `weak` means there is code, which is
-what "verified" used to mean and is why these four states exist. `/finalize-pr` blocks on any `weak`
-or any `unverified`, and does not block on `manual`.
+what "verified" used to mean and is why these four states exist.
+
+`/finalize-pr` blocks on any `unverified`, in every repository, and never blocks on `manual`.
+
+`weak` blocks only where a **test Seam** exists: where the toolchain `/finalize-pr` detects exposes a
+runnable test command, so a test name carrying a Criterion's id is something the repository can
+actually collect. Where none does, `weak` is the best state any Criterion can reach, and blocking
+there would make every pull request unmergeable forever rather than asking the author for anything.
+
+The Criterion is still reported as `weak` either way. What the test Seam changes is what `weak`
+costs, never what it is called, and the review comment names which of the two rules it applied and
+why, so a reader is never guessing which standard was used.
 
 Red-before-green ordering is not checked. A test carrying the id and a green gate is the whole
 contract.
