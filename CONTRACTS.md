@@ -101,11 +101,14 @@ Command form is preferred wherever the feature can be proven that way.
 each exactly one line:
 
 ```markdown
-**Critique:** codex (gpt-6-astra), #60 comment 2847193044, 2026-09-18
+**Critique:** google (gemini-3.8-flash-high), #60 comment 2847193044, 2026-09-18
 **Landed:** #61, #62, #63, 2026-09-24
 ```
 
 - **Critique** names the critic that ran, a link to the comment holding its findings, and the date.
+  The critic is `{vendor} ({model})`, taken from the entry of the Critics list that produced the
+  findings and never from an earlier entry that was skipped or returned nothing. A `codex` entry
+  configured as `default` records the word `default`, because that is what was passed.
   When the gate was skipped it instead holds the reason: `**Critique:** skipped, two-Criterion bug
   fix, 2026-09-18`.
 - **Landed** lists every pull request that built the Spec, and the date the last one merged.
@@ -361,19 +364,44 @@ Above ten Criteria on one Slice, `/finalize-pr` warns. It never blocks on the co
 docs/agents/workflow.md
 ```
 
-Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. Two lines, and nothing else:
+Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. One ordered list, and nothing else:
 
 ```markdown
-**Critic:** codex, gpt-6-astra
-**Fallback:** claude, claude-opus-5
+**Critics:**
+1. codex, default
+2. google, gemini-3.8-flash-high
+3. claude, claude-opus-5
 ```
 
-- **Critic** is the vendor and model `/critique-spec` sends the Spec to first.
-- **Fallback** is the vendor and model it uses when the first is not installed on this machine.
+Each entry is `{vendor}, {model}`. `/critique-spec` walks the list in order and runs the first entry
+that can actually produce a Critique on this machine: an entry whose tooling is absent is skipped,
+and so is one that runs and returns nothing.
 
-Written by `/setup-workflow`, read by `/critique-spec`, and by nothing else. Changing the critic is
-an edit to this line, not a release of the plugin. There is no mode line and no gate switch here:
-which gates block is not per-repo configuration.
+- **The order is the repo's choice.** The list above is the default `/setup-workflow` writes, and it
+  puts a different vendor's model ahead of Claude because doubting a Claude session's synthesis is
+  the whole point of the gate.
+- **The last entry is the floor and must name `claude`.** It is the only vendor that needs nothing
+  installed, so it is the only one that can be relied on to run. A file whose last entry names any
+  other vendor has no floor, and `/critique-spec` stops rather than discovering it halfway down the
+  chain.
+- **`default` in the model position** means let that vendor's wrapper choose. It is only meaningful
+  for `codex`, whose plugin asks callers to leave `--model` unset unless a specific model was
+  requested. A `google` or `claude` entry names a model.
+
+The vendors `/critique-spec` knows how to dispatch, and what each needs before it will run:
+
+| Vendor | CLI | Subagent | Also required |
+| --- | --- | --- | --- |
+| `codex` | `codex` | `codex:codex-rescue` | — |
+| `google` | `agy` | `antigravity:agy-rescue` | the entry's model id appears in `agy models` |
+| `claude` | none | a read-only agent type | — |
+
+Adding a vendor the table does not list is not a matter of editing this file: `/critique-spec` stops
+on a vendor it has no dispatch path for rather than guessing one.
+
+Written by `/setup-workflow`, read by `/critique-spec`, and by nothing else. Changing the critics, or
+their order, is an edit to this file and not a release of the plugin. There is no mode line and no
+gate switch here: which gates block is not per-repo configuration.
 
 Nothing in this file is loaded into a session's context. It is read on demand by the one skill that
 needs it.
