@@ -251,9 +251,24 @@ Two forms:
 | --- | --- |
 | `C1` | Inside its own Spec file |
 | `#60 C1` | Cited from a Slice body, carried in a test name, or named in a review comment |
+| `gr4vy/gr4ce#21 C4` | The same, where the Slice lives in a different repository than the pull request |
 
 The cited form is `#<spec-issue-number> C<n>`, one space between. It is globally unique, which is
 what lets `/finalize-pr` match a test to a Criterion across repositories and across time.
+
+### When the tracker and the pull request are different repositories
+
+A Slice may be tracked in one repository and built in another: the backend repository holds the
+Specs and the Slices, the front end that implements them has its own repository, and the pull
+request lands there. Everything above still holds, with the owner-qualified form carrying the
+repository across.
+
+**The repository is read, never assumed.** `gh pr view --json closingIssuesReferences` returns each
+linked issue's `repository.owner.login` and `repository.name`, and every `gh issue` call a skill
+makes about that Slice passes them as `--repo {owner}/{name}`. A bare `gh issue view 53` resolves
+against the pull request's own repository, where issue 53 is a different issue or no issue at all.
+Whether it errors or quietly reads the wrong body depends on what that number happens to be, which
+is the worst of the two failures to rely on catching.
 
 ### Given/When/Then is the default
 
@@ -327,6 +342,103 @@ behaviour.
 One Criterion may be carried by more than one test. A test may carry more than one id when it
 genuinely proves both.
 
+## The frame
+
+A frame is the image that proves a `[manual]` Criterion. It stands to a manual Criterion as a test
+stands to an automated one: the Criterion names what a person would see, and the frame is what they
+would have seen, captured from the code under review.
+
+It exists because `manual` was the one state with no evidence. `verified` names a test's
+`path:line`, `weak` names the code's, `unverified` names nothing and says so. `manual` named a
+sentence telling a reviewer to go and look, which meant the reviewer built the branch, ran it, and
+found their own way to the screen before they could disagree with anything.
+
+### The name carries the id
+
+A frame is named `{id-slug}-{short description}.png`, where the slug lowercases the cited form of
+the id and collapses every run of characters that are not letters or digits to one hyphen:
+
+| Cited id | Slug | A frame |
+| --- | --- | --- |
+| `#60 C2` | `60-c2` | `60-c2-cart-summary-balance.png` |
+| `gr4vy/gr4ce#21 C4` | `gr4vy-gr4ce-21-c4` | `gr4vy-gr4ce-21-c4-citation-anchor.png` |
+
+`/finalize-pr` matches the leading slug, which is the same literal match it already does on a test
+name. The binding between a Criterion and its evidence is therefore a property of the filename, not
+a judgement anybody makes at review time.
+
+### Frames come from a manifest, never from improvisation
+
+A repository that produces frames declares them in `docs/agents/frames.md`, beside
+`issue-tracker.md`, `triage-labels.md`, `domain.md` and `workflow.md`. One serve line and one table:
+
+```markdown
+**Serve:** `pnpm --dir frontend build && pnpm --dir frontend preview --port {port} --strictPort`
+
+| Criterion | Path | Viewport | Kind |
+| --- | --- | --- | --- |
+| gr4vy/gr4ce#21 C4 | /?scene=answer-citation | 1440x900 | still |
+| gr4vy/gr4ce#21 C5 | /?scene=stream-stop | 1440x900 | filmstrip |
+```
+
+- **Serve** is one command that brings the built application up on a port it is given. `{port}` is
+  substituted with the session's own preview port from the port block, so a fan-out of five Slices
+  serves five applications at once without any of them choosing a port.
+- **Path** is appended to `http://localhost:{port}`. It resolves to a scene: the screen rendered
+  from fixtures the repository controls, never from a live tenant.
+- **Viewport** is `{width}x{height}`, pinned so that a frame differs between two pull requests only
+  where the interface differs.
+- **Kind** is `still` for one image, or `filmstrip` for several captures of one scene stitched into
+  one image. `filmstrip` is for behaviour that only exists over time, such as an answer arriving
+  progressively. Video is not a kind: GitHub inlines an image and does not inline an `mp4`.
+
+A manifest row is a declaration that this Criterion has a frame. That is what makes the gate
+asymmetric, and the asymmetry is the whole design:
+
+| Situation | What `/finalize-pr` does |
+| --- | --- |
+| The Criterion has a row, and the frame was captured | Reports `manual`, citing the frame |
+| The Criterion has a row, and no frame came back | **Blocks.** A declared frame that did not get produced is a gate that did not run |
+| The Criterion has no row | Reports `manual` with no frame, and does not block |
+| The repository has no `frames.md` | Reports `manual` with no frame, and does not block |
+
+Nothing here makes a repository produce frames. It makes a repository that said it would produce
+one say so out loud when it did not, which is the same rule the quality gates are already held to.
+
+### Where a frame lands
+
+On an orphan branch named `ui-evidence` in the **pull request's own** repository, at
+`pr-{number}/{frame}.png`, written through the contents API rather than committed from a worktree:
+
+```bash
+gh api -X PUT "repos/{owner}/{repo}/contents/pr-{number}/{frame}.png" \
+  -f branch=ui-evidence -f message="frames for #{number}" -f "content=$(base64 -i {path})"
+```
+
+The branch is never merged, so the default branch stays free of binaries, and a reviewer with
+access to the repository can open the image without a checkout, a download or a build. The pull
+request's repository rather than the tracker's, because that is the repository a reviewer of this
+diff already has open, and the one whose access already matches.
+
+### A frame never changes a Criterion's state
+
+A `[manual]` Criterion with a frame is still `manual`. A frame shows that something rendered; it
+does not show that the behaviour holds, and the four states exist precisely because evidence that
+falls short of a passing test used to get reported as though it did not. `[manual]` still wins over
+every other state, and `/finalize-pr` still never blocks on `manual` itself.
+
+### Scenes are fed fixtures, and nothing else
+
+No tenant data, no live credential, no real card number, no session token on screen or in a URL a
+frame captures. A frame is published to a branch and linked from a pull request, which puts anything
+visible in it in front of everyone with repository access and leaves it in the history afterwards.
+
+### A Slice whose Criteria carry no ids
+
+Frames bind by id. A Slice whose checkboxes carry no ids has nothing for a manifest row to name, so
+`/finalize-pr` reports that the frames step was skipped and why, and does not block. Add the ids, or
+let `/acceptance-tests` write them back, and the step starts working.
+
 ## The four Criterion states in the `/finalize-pr` review comment
 
 `/finalize-pr` reports every Criterion the Slice owns as exactly one of four states. The state is
@@ -336,7 +448,7 @@ what was proven, not what was attempted.
 | --- | --- |
 | **verified** | A test whose name carries the Criterion's id exists, and the test gate passed |
 | **weak** | Code in the diff appears to implement it, but no test carries the id |
-| **manual** | The Criterion carries `[manual]`; listed for the human to check |
+| **manual** | The Criterion carries `[manual]`; listed for the human to check, with its frame where it has one |
 | **unverified** | Neither a test carrying the id nor identifiable code in the diff |
 
 Shape in the comment:
@@ -345,14 +457,16 @@ Shape in the comment:
 ### Criteria
 
 - verified    #60 C1 - `test/loyalty/earn.test.ts:14`, test gate green
-- manual      #60 C2 - check the cart summary renders "240 points"
+- manual      #60 C2 - check the cart summary renders "240 points" - [frame](https://github.com/o/r/blob/ui-evidence/pr-64/60-c2-cart-summary-balance.png?raw=true)
 - weak        #60 C3 - `src/auth/client.ts:88`, no test carries the id
 ```
 
 **verified is the only state that means the behaviour holds.** `weak` means there is code, which is
 what "verified" used to mean and is why these four states exist.
 
-`/finalize-pr` blocks on any `unverified`, in every repository, and never blocks on `manual`.
+`/finalize-pr` blocks on any `unverified`, in every repository, and never blocks on `manual`. It
+blocks on a **declared frame that did not get produced**, which is a failed gate rather than a
+judgement about the Criterion, and is reported as one.
 
 `weak` blocks only where a **test Seam** exists: where the toolchain `/finalize-pr` detects exposes
 a runnable test command, so there is a test the author could have written and did not. Where none
@@ -366,6 +480,50 @@ Red-before-green ordering is not checked. A test carrying the id and a green gat
 contract.
 
 Above ten Criteria on one Slice, `/finalize-pr` warns. It never blocks on the count.
+
+## The port block
+
+A fan-out puts several sessions on one machine at the same time. Each has its own worktree, so they
+cannot see each other's files, and that is the only isolation git can give them. The machine's
+ports, its browser and its container names are shared, and every tool's default port is the same
+number in every worktree.
+
+A Slice owns ten ports, derived from its issue number the same mechanical way its worktree and its
+branch are:
+
+```
+base = 20000 + (n mod 4000) * 10
+```
+
+| Port | What it serves |
+| --- | --- |
+| `base` | The application's dev server |
+| `base + 1` | The preview server a frame is captured from |
+| `base + 2` | The backend or API the application talks to |
+| `base + 3` … `base + 9` | Anything else the Slice starts: an emulator, a worker, a debugger |
+
+Slice `#62` owns `20620` through `20629`. Two issue numbers 4000 apart share a block, which is a
+collision between two Slices that would have to be in flight at the same time four thousand issues
+apart, and is accepted rather than worked around.
+
+**No default port, ever.** `vite` on 5173, `uvicorn` on 8000 and a Firestore emulator on 8080 are
+each one number in every worktree at once. A server started on its default port is started on
+another Slice's port often enough that the first session to run wins and the rest report failures
+that do not reproduce.
+
+**A listening port outside your block belongs to another Slice.** Do not use it, do not kill it, do
+not investigate it. The failure this replaces is not a collision, it is the reasoning that follows
+one: a session finds a port taken, cannot explain it, and goes looking. Killing the process that
+holds it takes a sibling's server down mid-Slice, and the sibling reports something nobody can
+reproduce afterwards.
+
+**Anything else the machine shares is held to the same rule**, by giving each session its own rather
+than asking it to share carefully. A browser profile directory shared between sessions is a port by
+another name.
+
+`/dispatch-slices` computes the block and puts the resolved range in the session's prompt, so a
+session is told its ports rather than deriving them. A Slice driven by hand in the main checkout has
+the formula and its own issue number, which is the same answer.
 
 ## The per-repo workflow file
 

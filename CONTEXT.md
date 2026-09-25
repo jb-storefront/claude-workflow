@@ -31,3 +31,15 @@ _Avoid_: review, red team, analysis
 **Verification**:
 The Spec's end-to-end proof that the whole feature works, run or walked through after the last Slice lands. Distinct from a Criterion, which proves one behaviour.
 _Avoid_: smoke test, QA, acceptance test
+
+**Scene**:
+One screen of an application rendered from fixtures the repository controls, reached at a path, so that what it shows depends on the code under review and on nothing else.
+_Avoid_: story, demo page, fixture page
+
+**Frame**:
+The image of a Scene that a `[manual]` Criterion is proven by, named after that Criterion's id. Stands to a manual Criterion as a test stands to an automated one.
+_Avoid_: screenshot, capture, visual
+
+**Port block**:
+The ten ports one Slice owns while its session runs, derived from its issue number so that parallel Slices never contend for one.
+_Avoid_: port range, port offset

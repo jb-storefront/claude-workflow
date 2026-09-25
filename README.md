@@ -13,13 +13,15 @@ GitHub-tracked vertical slices, each running in its own **git worktree** on your
   └ per slice, inside its own worktree:
       /start-issue →  claim, branch, draft PR, install deps                          ← this plugin
       /tdd         →  red-green-refactor to the acceptance criteria
+      /frames      →  capture what a [manual] criterion says a person would see      ← this plugin
       /finalize-pr →  gates, PR description, code review, ready-for-human            ← this plugin
 /merge-stack       →  land the batch in dependency order, tearing down worktrees     ← this plugin
 ```
 
 `/grill-with-docs`, `/to-spec`, `/to-tickets`, and `/tdd` come from
 [mattpocock/skills](https://github.com/mattpocock/skills); this plugin supplies the four that
-surround them, plus `/rebase-pr` and `/merge-pr` for the single-PR cases.
+surround them, plus `/frames` for the screens a reviewer would otherwise have to build the branch
+to see, and `/rebase-pr` and `/merge-pr` for the single-PR cases.
 
 Two more sit beside the loop rather than inside it:
 
@@ -85,6 +87,22 @@ generates it from the repo's merged PRs on first use; see that skill for the kno
 remote. `claude --bg --worktree issue-{n}` creates it, `claude agents --json` lists what is
 running, and `claude rm <id>` removes the session and its worktree. None of that has to be
 hand-rolled any more, which is most of why this version is shorter than the one it replaces.
+
+**Isolation stops at the filesystem, so ports are handed out rather than found.** A worktree keeps
+five sessions from seeing each other's files and does nothing about the machine they share, where
+every tool's default port is the same number in all five. Each Slice owns ten ports derived from its
+issue number, `/dispatch-slices` puts the resolved range in the prompt, and a listening port outside
+that range is declared to belong to someone else. The bug this ends is not the collision, which a
+session usually survives. It is the reasoning that follows one: a session finds a port taken, cannot
+explain it, and goes looking, sometimes as far as killing the process holding it.
+
+**`manual` was the one Criterion state with no evidence.** `verified` cites a test, `weak` cites the
+code, `unverified` cites nothing and says so, and `manual` cited a sentence asking a reviewer to go
+and look, which meant building the branch before they could disagree with anything. `/frames`
+captures the screen a `[manual]` Criterion describes from fixtures the repo controls, names the file
+after the Criterion's id so the binding is mechanical rather than a judgement, and publishes it to a
+`ui-evidence` branch the default branch never merges. A Frame is evidence for a `manual` Criterion;
+it never promotes one, because a screen that rendered is not a behaviour that holds.
 
 **A worktree pins its branch, and that shapes the merge skills.** Git allows one checkout per
 branch, so while a slice's worktree exists the main checkout cannot `git switch` to that branch or
