@@ -47,6 +47,13 @@ diff satisfies it.}
 
 {One bullet per meaningful change, grouped by what it accomplishes rather than by directory.}
 
+## Screens
+
+{Only where `/finalize-pr` handed you Frames. One markdown image per Frame, alt text the Criterion's
+id, URL as given. No commentary: the images are the point, and a caption describing what the
+reviewer is looking at is a caption they have to disagree with before they can trust their own eyes.
+Omit the whole section when there are none.}
+
 ## Review notes
 
 {Where to start, what is subtle, what you deliberately left out and why. Say when there is nothing

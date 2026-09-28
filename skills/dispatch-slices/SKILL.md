@@ -1,6 +1,6 @@
 ---
 name: dispatch-slices
-description: Fan out unblocked Slices to parallel local Claude Code sessions, one git worktree per Slice. Refuses a Spec still at draft or whose Criteria are not all owned by a Slice, treats every Slice as a lone Slice in a repo whose per-repo workflow file says `**Specs:** off`, classifies a Slice as needing a person only from `[manual]` tags, sets the Spec to in-progress at the first fan-out, then dispatches each session through /start-issue, /acceptance-tests, /tdd and /finalize-pr. Use when the user says "/dispatch-slices", "start the next slices", "work these issues in parallel", or has just finished /to-tickets.
+description: Fan out unblocked Slices to parallel local Claude Code sessions, one git worktree per Slice. Refuses a Spec still at draft or whose Criteria are not all owned by a Slice, treats every Slice as a lone Slice in a repo whose per-repo workflow file says `**Specs:** off`, classifies a Slice as needing a person only from `[manual]` tags, sets the Spec to in-progress at the first fan-out, gives each session its own port block so parallel Slices never contend for a port, then dispatches each session through /start-issue, /acceptance-tests, /tdd and /finalize-pr, with a HITL Slice running /frames and stopping for its person. Use when the user says "/dispatch-slices", "start the next slices", "work these issues in parallel", or has just finished /to-tickets.
 ---
 
 # Dispatch Slices
@@ -292,6 +292,7 @@ Skipped: #59 (assigned), #60 (the Spec issue)
 
 Base:    origin/{default} @ {base_sha}
 Trees:   .claude/worktrees/issue-61, issue-62, issue-63
+Ports:   20610-20619, 20620-20629, 20630-20639
 Action:  set the Spec to in-progress on {default}, then one background session per Slice,
          each in its own worktree, running independently.
 Proceed?
@@ -375,15 +376,36 @@ session runs them, and references the Spec so the session can read it for contex
 
 ```bash
 claude --bg --worktree issue-{n} --dangerously-skip-permissions \
-  "/start-issue {n} — refer to the Spec in issue #{spec} for context. Then run /acceptance-tests, then /tdd, then /finalize-pr."
+  "/start-issue {n} — refer to the Spec in issue #{spec} for context. Then run /acceptance-tests, then /tdd, then /finalize-pr. {parallelism}"
 ```
 
-**HITL Slice** — the session must stop rather than self-certify:
+**HITL Slice** — the session must stop rather than self-certify, and it stops with the Frames
+already published so the person it is waiting for can start from those:
 
 ```bash
 claude --bg --worktree issue-{n} --dangerously-skip-permissions \
-  "/start-issue {n} — refer to the Spec in issue #{spec} for context. Then run /acceptance-tests, then /tdd. When the work is complete, push the branch and STOP: tell me it needs a manual check and wait. Do not run /finalize-pr yourself."
+  "/start-issue {n} — refer to the Spec in issue #{spec} for context. Then run /acceptance-tests, then /tdd. When the work is complete, push the branch, run /frames, and STOP: tell me it needs a manual check, name the Frames you published, and wait. Do not run /finalize-pr yourself. {parallelism}"
 ```
+
+### `{parallelism}`, in every prompt
+
+Both prompts end with the same block, with the numbers resolved:
+
+```
+You are one of {N} sessions running right now, each in its own worktree on this machine and
+sharing its ports, its browser and its containers. Your port block is {base}-{base+9}: start
+every server on a port in it, never on a tool's default port. A listening port outside your
+block belongs to another Slice. Do not use it, do not kill it, do not investigate it.
+```
+
+`base = 20000 + (n mod 4000) * 10`, per `CONTRACTS.md`, which also has the layout of the ten and
+why the rule is a fact rather than advice. Resolve it here and put the numbers in the prompt: a
+session given `20620-20629` needs no arithmetic and cannot get it wrong, and a session told only the
+formula has one more thing to get right before it has done anything.
+
+The last sentence is the one that earns its place. The failure it replaces is not the collision, it
+is the reasoning that follows one: a session finds a port taken, cannot explain it, and goes
+looking, sometimes as far as killing the process holding it. Closing the question costs four words.
 
 On a lone Slice, drop the `— refer to the Spec…` clause. The rest is unchanged: a lone Slice numbers
 its own Criteria and `/acceptance-tests` writes them back to the issue body. Drop it on a Slice whose
@@ -486,7 +508,8 @@ it for a session that ran one command. It is for a human to look at, not for an 
 - One session per Slice, one worktree per Slice, named `issue-{n}`. Never batch two Slices into one session — they would share a branch and collide in `/merge-stack`.
 - Never dispatch an issue that is assigned, already has an open PR, or already has a worktree.
 - One confirmation (§6), then run through the whole set.
-- The dispatch prompt names `/start-issue`, `/acceptance-tests`, `/tdd`, `/finalize-pr` in that order; the HITL variant stops before `/finalize-pr`.
+- The dispatch prompt names `/start-issue`, `/acceptance-tests`, `/tdd`, `/finalize-pr` in that order; the HITL variant runs `/frames` and stops before `/finalize-pr`.
+- Every prompt carries the resolved port block and the rule about ports outside it. Never dispatch a session that has to work out which ports are free.
 - Pass `--dangerously-skip-permissions` on these background dispatches, and nowhere else.
 - A dispatch counts as done only when its output carries a background session id. An exit code is not evidence.
 - Never parse `claude logs` output. Read `claude agents --json`.
