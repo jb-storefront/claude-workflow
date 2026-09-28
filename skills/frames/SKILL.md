@@ -77,14 +77,26 @@ has to be on the default branch to reach a worktree.
 ## 5. Serve the application
 
 Run the manifest's `**Serve:**` command with `{port}` substituted for `base + 1`, in the background,
-and wait for it to answer:
+and wait for it to answer, for a bounded number of seconds and never indefinitely:
 
 ```bash
-until curl -sf "http://localhost:{port}/" >/dev/null; do sleep 1; done
+for i in $(seq 1 90); do
+  curl -sf "http://localhost:{port}/" >/dev/null && break
+  sleep 1
+done
+curl -sf "http://localhost:{port}/" >/dev/null && echo ready || echo "no answer on {port} after 90s"
 ```
 
+Anything but `ready` is a **stop**, carrying the serve command's own output.
+
+**The bound is the point, not the number.** An unbounded wait turns a server that never binds into a
+session that never ends, and this skill runs inside `claude --bg` sessions with nobody watching. The
+HITL path is where that costs most: a person is already waiting for the Frames, and what they get
+instead is a worktree held open until somebody notices. A serve command that fails has to fail
+loudly within a minute or two.
+
 Stop it in §8 whatever happens above. A serve command that fails is a stop with its output, not a
-Frame that quietly did not get taken.
+Frame that quietly did not get taken, and not a wait that never returns.
 
 ## 6. Capture each declared Frame
 
