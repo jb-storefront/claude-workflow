@@ -23,7 +23,11 @@ GitHub-tracked vertical slices, each running in its own **git worktree** on your
 surround them, plus `/frames` for the screens a reviewer would otherwise have to build the branch
 to see, and `/rebase-pr` and `/merge-pr` for the single-PR cases.
 
-Two more sit beside the loop rather than inside it:
+Four more sit beside the loop rather than inside it:
+
+- **`/create-bug`** and **`/create-feature`** file ad hoc work as a lone Slice, shaped so the loop
+  runs it like one `/to-tickets` published, with its Seam already written. Work that turns out to
+  be a Spec goes to `/grill-with-docs` instead.
 
 - **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
   intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.

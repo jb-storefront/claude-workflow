@@ -178,7 +178,8 @@ published one.
 
 `/to-tickets` writes four of them: `## Parent`, `## What to build`, `## Acceptance criteria` and
 `## Blocked by`. `## Seam` and `## References for context` are not in its template, so they arrive
-by hand or not at all.
+by hand or not at all. `/create-bug` and `/create-feature` file lone Slices that carry every section but
+`## Parent`, per [references/ad-hoc-slice.md](references/ad-hoc-slice.md).
 
 That `## Seam` is absent from a published Slice is not a gap to be patched here. It is why
 `/acceptance-tests` asks for the Seam rather than reading it: the one gate input the tracker cannot
