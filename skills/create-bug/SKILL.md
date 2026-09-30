@@ -12,15 +12,17 @@ Slice body is `CONTRACTS.md`'s. Read both before step 1.
 ## Steps
 
 1. **Load the repo context** that the reference names.
-2. **Reproduce it.** Trace the code path and confirm the bug on the current default branch without
-   changing the checkout. Record the short commit SHA, the environment and the date. A local
-   reproduction of a bug reported from a deployed environment counts; say which. A bug you could
-   not reproduce is still fileable, as `needs-info`, with what you tried.
+2. **Reproduce it** on the current default branch, in a throwaway worktree or a scratch file, and
+   leave the user's checkout as it was. Record the short commit SHA, where it ran (locally, or the
+   deployed environment it was reported from) and the date. A bug already fixed on the default
+   branch stops the skill: name the commit that fixed it and file nothing. A bug you could not
+   reproduce is still fileable, as `needs-info`, with what you tried.
 3. **Find the cause.** Separate the root cause from the symptom it was reported as. When the report
    names a downstream effect of a more basic defect, the Slice is about the basic one. A cause you
    could not verify is written as a hypothesis naming where to look.
-4. **Find the tests that pin it.** A test asserting the defect as today's behaviour changes with the
-   fix. Name it in `## Worth deciding`, so the change reads as the fix and not as a weakened test.
+4. **Find any test that pins it.** When a test asserts the defect as today's behaviour, the fix
+   changes it. Name that test in `## Worth deciding`, so the change reads as the fix and not as a
+   weakened test.
 5. **Decide the fix.** Write `## What to build` as the fix you would ship, and the Seam its tests
    observe. Real alternatives become `## Worth deciding` entries.
 6. **Find the Spec, duplicates and Slice count**, per the reference.
@@ -52,8 +54,8 @@ Slice body is `CONTRACTS.md`'s. Read both before step 1.
 ## The bug's Criteria
 
 The first Criterion is the one that goes **red** on the bug today: the defect, observed at the Seam.
-Then one per behaviour the fix guarantees, including each neighbouring behaviour that must survive
-it. Severity stays in the body.
+Then one per behaviour the fix guarantees, and one for each existing behaviour the fix's change
+could plausibly break. Severity stays in the body.
 
 ## Bug description
 

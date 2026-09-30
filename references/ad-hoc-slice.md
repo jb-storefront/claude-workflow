@@ -21,15 +21,16 @@ Every domain concept in the issue carries its `CONTEXT.md` term. When the issue 
 the body says so: _Contradicts ADR-NNNN (…), worth reopening because…_
 
 An area `CLAUDE.md` often names a prerequisite for changing that area, such as a design file to
-start from or a contract document to update in the same change. Each one becomes a Criterion or a
-line under `## References for context`, so the session that builds the Slice meets it.
+start from or a contract document to update in the same change. One a test or gate can check
+becomes a Criterion; any other becomes a line under `## References for context`. Either way the
+session that builds the Slice meets it.
 
 ## Why a lone Slice, even under a Spec
 
 A Slice with a `## Parent` owns Criteria of that Spec, and `/acceptance-tests` stops when the Spec
 file is missing or the cited id is not in it. Ad hoc work adds behaviour no Spec Criterion
-describes, so it owns none. It numbers its own Criteria, which `/acceptance-tests` writes back as
-`#{number} C{n}`.
+describes, so it owns none. Its checkboxes are filed with no id, and `/acceptance-tests` numbers
+them `#{number} C{n}` under the Slice's own number and writes the ids back.
 
 When the work belongs to an open Spec's area, link it to the Spec issue natively as a sub-issue and
 name the Spec under `## Related`. The Spec issues are the open issues with sub-issues:
@@ -39,8 +40,9 @@ gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$
   -f o={owner} -f r={repo} --jq '.data.repository.issues.nodes[] | select(.subIssues.totalCount>0) | "#\(.number) \(.title)"'
 ```
 
-`{owner}` and `{repo}` come from `gh repo view --json owner,name`. Read a candidate's body to decide
-whether the work falls inside its scope. No match is common and needs no link.
+`{owner}` and `{repo}` come from `gh repo view --json owner,name`. Link the Slice to the Spec whose
+sub-issues already change the code this Slice changes. No such Spec, or two equally, means no link,
+which is common.
 
 ## Duplicates and related work
 
@@ -52,7 +54,12 @@ under `## Related`, with its state. A related issue whose PR has merged is histo
 
 A PR lands in one repository, so behaviour that needs a PR in two repositories is two Slices: one
 per repository, the downstream one blocked by the upstream one, both filed in this tracker. Each
-cuts through every layer its repository holds, and each is demoable against the other.
+cuts through every layer its repository holds, and each is demoable against the other. The
+downstream Slice's Criteria describe its own repository's behaviour, and its `## Blocked by` names
+the upstream Slice by number once that one is filed.
+
+A Slice carries at most ten Criteria, the count above which `/finalize-pr` warns. More than ten is
+two Slices' worth of behaviour.
 
 Behaviour still under argument, or work that needs more Slices than that, is a Spec. Say so,
 recommend `/grill-with-docs` then `/to-spec`, and file nothing.
@@ -105,7 +112,7 @@ files for References. A hedge is a Worth deciding entry, so What to build reads 
 dispatched session. The skill found it while investigating; writing it here is what lets the Slice
 run unattended.
 
-**Acceptance criteria** are one line each, and each line is the Then of a Criterion under
+**Acceptance criteria** are one line each, with no id, and each line states a Criterion under
 `CONTRACTS.md`'s grammar: measurable, resolving to pass or fail. Observe behaviour at the Seam, not
 the wording of a message. A Criterion only a person can check carries `[manual]` at its start.
 
@@ -132,6 +139,9 @@ label by the first rule that matches:
 2. `needs-triage`: `## Worth deciding` holds an **Open:** entry.
 3. `ready-for-human`: a person has to do the work (console access, another team, a credential).
 4. `ready-for-agent`: otherwise.
+
+A `[manual]` Criterion leaves the label alone. An agent builds that Slice, and `/dispatch-slices`
+routes it to a person for the check.
 
 Label strings come from `docs/agents/triage-labels.md` when it exists. A label missing from
 `gh label list` is left off, and the report names it.
