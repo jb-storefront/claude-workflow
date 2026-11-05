@@ -93,9 +93,12 @@ that instead.
 The miner assumes nothing except merged PRs. Two things sharpen it:
 
 - A start-of-work marker commit. Default pattern is `start work on #(\d+)`,
-  written by the `/start-issue` skill. Override with `--start-marker`. Without
-  one it falls back to the first commit on the branch and GitHub's closing
-  reference, which is looser but still works.
+  which `/start-issue` wrote as an empty commit until it stopped making one.
+  PRs from before then carry it; PRs since do not. Override with
+  `--start-marker`. Without one it falls back to the first commit on the
+  branch and GitHub's closing reference, which is looser but still works: a
+  PR's start reads as its first real commit, so the time between claiming an
+  issue and committing to it goes uncounted.
 - Squash-on-merge is fine and needs no accommodation. GitHub keeps the PR's
   branch commits after a squash, and the miner reads those, not the merge
   commit. Do not recommend changing a repo's merge policy for this skill's

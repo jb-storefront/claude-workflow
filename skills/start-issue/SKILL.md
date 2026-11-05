@@ -1,12 +1,13 @@
 ---
 name: start-issue
-description: Begin work on a GitHub issue — claim it, name the branch, open a draft PR, and set up the worktree's environment. Pass --no-branch to work directly on the default branch. Use when the user says "/start-issue <number>", "start issue 42", or when a dispatched background session begins a slice.
+description: Begin work on a GitHub issue: claim it, name and push the branch, and set up the worktree's environment; the draft PR opens with the first real commit. Pass --no-branch to work directly on the default branch. Use when the user says "/start-issue <number>", "start issue 42", or when a dispatched background session begins a slice.
 ---
 
 # Start Issue
 
-Put a slice issue into a workable state: the issue claimed, a named branch, a draft PR to collect
-the work, and a worktree with its dependencies installed.
+Put a slice issue into a workable state: the issue claimed, a named branch on the remote, and a
+worktree with its dependencies installed. The draft PR that collects the work opens with the first
+real commit, never with a commit made only to open it.
 
 Normally this runs as the first act of a background session dispatched by `/dispatch-slices`. That
 session starts in `.claude/worktrees/issue-{n}`, on a branch named `worktree-issue-{n}` cut from the
@@ -48,9 +49,9 @@ steps 1, 2, and 8. Useful for local work on `main`.
    without push access are [silently ignored](https://docs.github.com/en/rest/issues/assignees):
    no error, empty result. A caller who trusts the status code reports a claim it never made.
 
-   Claiming first is the point. The branch and the draft PR are also de-duplication signals —
-   `/dispatch-slices` §2 drops anything with an open PR — but they arrive several steps later, and
-   the window they leave open is exactly the one two sessions collide in.
+   Claiming first is the point. The draft PR is also a de-duplication signal, since
+   `/dispatch-slices` §2 drops anything with an open PR, but it arrives only with the first
+   commit, and the window that leaves open is exactly the one two sessions collide in.
 
 3. **Build the branch name.** Prefix from labels, first matching rule wins: `bug` → `fix`;
    `feature`/`enhancement` → `feat`; `refactor` → `refactor`; `docs`/`documentation` → `docs`;
@@ -68,17 +69,25 @@ steps 1, 2, and 8. Useful for local work on `main`.
    - Otherwise (a plain local run) → `git checkout -b {prefix}/{number}-{slug}`.
 
    If the target branch name already exists — only possible when re-running in the same session —
-   reuse it and skip to step 6.
+   reuse it and carry on from step 5.
 
    Nothing to reset either way: a worktree is new, and a local run is the user's checkout to
    manage.
 
-5. **Initial empty commit.** `git commit --allow-empty -m "chore: start work on #{number}"`
+5. **Push the branch.** `git push -u origin {branch}`. It carries no commit of its own yet, and
+   needs none: the push makes the branch's name visible on the remote and sets the upstream the
+   first real commit pushes to.
 
-6. **Push and open a draft PR.**
+6. **Leave the draft PR to the first commit.** GitHub refuses a pull request whose head has no
+   commits ahead of its base, and the empty commit that used to get round that lands on the
+   default branch as a line that says nothing, because a squash merge copies every branch commit
+   message into the one on the default branch. So no PR opens here, and no commit is made to open
+   one.
+
+   The session's first push that carries a commit opens it, with this command. Fill it in now and
+   print it in step 8, so the session has it when that push comes:
 
    ```
-   git push -u origin {branch}
    gh pr create --draft --head {branch} --title "{issue-title}" --body "Closes #{number}
 
    ## Summary
@@ -91,8 +100,9 @@ steps 1, 2, and 8. Useful for local work on `main`.
    "
    ```
 
-   The draft PR exists from the start so CI runs against the work as it lands, and so
-   `/finalize-pr` has a stable target. `/finalize-pr` rewrites this body later.
+   Opened then, the draft PR still has CI run against the work as it lands, and `/finalize-pr`
+   still has a stable target and rewrites this body later. If the session never opened it,
+   `/finalize-pr` opens the same PR itself.
 
    Keep `Closes #{number}` as the body's first line. It is what links the PR to its issue for a
    human reading either one, and what `/finalize-pr` and `/merge-pr` fall back to if the linkage is
@@ -127,14 +137,16 @@ steps 1, 2, and 8. Useful for local work on `main`.
    Issue:    #{number} — {title}
    Branch:   {branch}
    Worktree: {path}              (omit outside a worktree)
-   PR:       {pr-url}
+   PR:       opens with the first commit's push (step 6)
    Assigned: @me
    Deps:     {installed with {cmd} | skipped — no lockfile matched | not a worktree}
 
-   Next: /tdd to begin work.
+   Next: /tdd to begin work. After the first commit, push and run:
+     {the gh pr create command from step 6, filled in}
    ```
 
-   In `--no-branch` mode, report `Branch: {default_branch} (working directly)` and `PR: (skipped)`.
+   In `--no-branch` mode, report `Branch: {default_branch} (working directly)` and `PR: (skipped)`,
+   and leave out the `gh pr create` line.
 
 ## Rules
 
@@ -142,5 +154,6 @@ steps 1, 2, and 8. Useful for local work on `main`.
 - Use the repo's actual default branch, never a hardcoded `main`.
 - Never `git reset --hard`, never delete a branch. In a worktree, a state you cannot explain is not yours to repair: report it, and let the human `claude rm` the session and re-dispatch. Locally, an unexpected branch state is the user's to resolve.
 - Never edit a file or run a command in the main checkout from inside a worktree. Claude Code blocks it, and the block is right: the point of the worktree is that the other sessions cannot see your work.
+- Never make an empty commit, here or to open a PR. It says nothing, and a squash merge carries it onto the default branch anyway.
 - In `--no-branch` mode, do not commit, push, or open a PR. Still claim the issue — it is what tells the next dispatch this one is taken.
 - Never treat a GitHub write as done because it returned success. Where a read-back is specified, run it.

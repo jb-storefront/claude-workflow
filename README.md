@@ -11,7 +11,7 @@ GitHub-tracked vertical slices, each running in its own **git worktree** on your
 /to-tickets        →  break the spec into independently-grabbable slice issues
 /dispatch-slices   →  fan the unblocked slices out to parallel background sessions  ← this plugin
   └ per slice, inside its own worktree:
-      /start-issue →  claim, branch, draft PR, install deps                          ← this plugin
+      /start-issue →  claim, branch, install deps; draft PR on the first commit      ← this plugin
       /tdd         →  red-green-refactor to the acceptance criteria
       /frames      →  capture what a [manual] criterion says a person would see      ← this plugin
       /finalize-pr →  gates, PR description, code review, ready-for-human            ← this plugin
