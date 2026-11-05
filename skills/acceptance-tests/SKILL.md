@@ -12,7 +12,8 @@ Criterion verified because a test carrying its id went green, not because the di
 tried.
 
 Normally this runs as the second act of a dispatched session, after `/start-issue` and before
-`/tdd`. The branch, the draft PR and the worktree already exist.
+`/tdd`. The branch and the worktree already exist. The draft PR does not yet: it opens with the
+Slice's first push, using the `gh pr create` command `/start-issue` printed.
 
 **This skill writes tests and nothing else.** No implementation, no stub that makes a test pass, no
 production file touched. Every test it leaves behind is failing when it commits. Making them pass is

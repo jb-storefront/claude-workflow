@@ -27,7 +27,12 @@ Sections a Slice is missing are skipped rather than fatal, with the exceptions �
 - `git status --porcelain` — if non-empty, **stop**: commit or stash first.
 - Find/create the PR:
   - With arg: `gh pr view {number} --json number,title,url,isDraft,headRefName,closingIssuesReferences,mergeStateStatus`. If `headRefName != {branch}`, stop.
-  - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, create a draft: `gh pr create --draft --title "{branch}" --body "Work in progress"` and capture the new number/URL.
+  - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, open the draft
+    `/start-issue` step 6 describes, which a session that never pushed it leaves to this skill:
+    `{number}` from a branch named `{prefix}/{number}-{slug}`, the issue's title, and
+    `Closes #{number}` as the body's first line, so §2 finds the issue. On a branch not in that
+    form, `gh pr create --draft --title "{branch}" --body "Work in progress"`, and §2 reports no
+    linked issue. Capture the new number/URL either way.
 - Assign to current user: `{gh_user}` = `gh api user --jq '.login'`, then
 
   ```bash
