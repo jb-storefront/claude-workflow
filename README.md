@@ -92,7 +92,7 @@ single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/anchor
 vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which
 are missing and prints the commands. Without them the Claude critic still runs.
 
-Four more sit beside the loop rather than inside it:
+Three more sit beside the loop rather than inside it:
 
 - **`/create-bug`** and **`/create-feature`** file ad hoc work as a lone Slice, shaped so the loop
   runs it like one `/to-tickets` published, with its Seam already written. Work that turns out to
@@ -100,8 +100,10 @@ Four more sit beside the loop rather than inside it:
 - **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
   intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.
   It answers in slices first and quotes a band, never a point estimate.
-- **`/retro`** reviews a finished session and proposes changes to the agent's *environment*
-  (navigation pointers, automated checks, reviewer rules) rather than to the code.
+
+For a retrospective on a finished session, use Pocock's `/retro`. It proposes changes to the
+agent's *environment* (navigation pointers, automated checks, reviewer rules) rather than to the
+code.
 
 ## What a repo needs before the first fan-out
 
