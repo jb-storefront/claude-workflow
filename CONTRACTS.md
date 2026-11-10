@@ -614,7 +614,7 @@ review can put vendors in different orders.
   `/review-pr` stops rather than discovering it halfway down the chain.
 - **The order is the repo's choice.** `/setup-workflow` writes the same default order as Critics,
   for a new file and when it adds the list to an existing file that lacks it. It never reorders a
-  list that is already there, and never copies the repo's Critics order into it.
+  list that is already there.
 
 **A missing list means the Claude floor runs.** `/review-pr` does not borrow the Critics list in its
 place: it runs Claude's built-in security review, and says once that `/setup-workflow` adds the

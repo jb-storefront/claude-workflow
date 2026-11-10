@@ -15,9 +15,8 @@ import tempfile
 from pathlib import Path
 
 WRITER = Path(__file__).with_name("workflow-file.py")
-# This repo's docs/agents/workflow.md as it stood before the Security reviewers
-# list existed. Frozen here so the cases keep their precondition once the real file
-# is migrated.
+# This repo's docs/agents/workflow.md as it stood before #53 migrated it. Frozen
+# here because the migrated file no longer has the precondition C2 starts from.
 THIS_REPO = (
     '# Workflow\n'
     '\n'
@@ -207,7 +206,92 @@ def unknown_lines_survive(root):
     return True, ""
 
 
+def crlf_survives(root):
+    f = root / "workflow.md"
+    original = THIS_REPO.replace("\n", "\r\n").encode()
+    f.write_bytes(original)
+    proc = run(f, "--write")
+    if proc.returncode != 0:
+        return False, f"exit {proc.returncode}: {proc.stderr.strip()}"
+    after = f.read_bytes()
+    if not after.startswith(original):
+        return False, "the CRLF lines it does not own were rewritten"
+    if b"\n" in after.replace(b"\r\n", b""):
+        return False, "the added list uses LF in a CRLF file"
+    return True, ""
+
+
+def content_after_critics_stays_separate(root):
+    f = root / "workflow.md"
+    f.write_text(
+        "**Critics:**\n"
+        "1. codex, default\n"
+        "2. claude, claude-opus-5\n"
+        "Notes here\n"
+    )
+    run(f, "--write")
+    after = f.read_text()
+    if entries(after, "Critics") != [("codex", "default"), ("claude", "claude-opus-5")]:
+        return False, f"Critics became {entries(after, 'Critics')}"
+    if "claude-opus-5\n\nNotes here\n" not in after:
+        return False, f"the line after the lists is no longer its own paragraph: {after!r}"
+    return True, ""
+
+
+def fallback_before_critic_converts_cleanly(root):
+    f = root / "workflow.md"
+    f.write_text(
+        "**Fallback:** claude, claude-opus-5\n"
+        "\n"
+        "**Critic:** codex, default\n"
+    )
+    run(f, "--write")
+    after = f.read_text()
+    if entries(after, "Critics") != [("codex", "default"), ("claude", "claude-opus-5")]:
+        return False, f"Critics became {entries(after, 'Critics')}"
+    if after.startswith("\n"):
+        return False, "the conversion left a leading blank line"
+    return True, ""
+
+
+def floorless_list_is_flagged_and_left_alone(root):
+    f = root / "workflow.md"
+    f.write_text(
+        "**Critics:**\n"
+        "1. claude, claude-opus-5\n"
+        "2. codex, default\n"
+        "\n"
+        "**Security reviewers:**\n"
+        "1. codex, default\n"
+    )
+    before = f.read_bytes()
+    proc = run(f, "--write")
+    if f.read_bytes() != before:
+        return False, "a user's list was rewritten to fix its floor"
+    if proc.returncode == 0:
+        return False, "exited 0 on lists whose last entry is not claude"
+    if "Critics" not in proc.stderr or "Security reviewers" not in proc.stderr:
+        return False, f"did not name both floorless lists: {proc.stderr.strip()!r}"
+    return True, ""
+
+
+def unreadable_path_fails_cleanly(root):
+    proc = run(root)
+    if proc.returncode == 0:
+        return False, "exited 0 on a directory"
+    if "Traceback" in proc.stderr:
+        return False, "crashed with a traceback"
+    return True, ""
+
+
 CASES = [
+    ("CRLF line endings survive", crlf_survives),
+    ("content right after Critics stays its own paragraph", content_after_critics_stays_separate),
+    ("Fallback above Critic converts without a stray blank line",
+     fallback_before_critic_converts_cleanly),
+    ("a list whose last entry is not claude is flagged and left alone",
+     floorless_list_is_flagged_and_left_alone),
+    ("an unreadable path fails without a traceback", unreadable_path_fails_cleanly),
     ("an old Critic/Fallback file becomes the Critics list it encodes",
      old_shape_becomes_the_list_it_encodes),
     ("lines the writer does not own survive", unknown_lines_survive),

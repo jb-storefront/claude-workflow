@@ -118,8 +118,8 @@ Print one block per artifact, in the order of §3, each marked with what will ha
 ```
 
 Show the **full literal content** of anything new: the settings block, the workflow file, and the
-pointer block. For the workflow file that is the script's draft from §3 step 5, run without
-`--write`, printed as it comes back; an existing file it would change is shown the same way. Show the merged result for the settings file, not the fragment, so the user can see
+pointer block. For the workflow file, that is the draft the script in §3 step 5 prints without
+`--write`, new file or changed one alike. Show the merged result for the settings file, not the fragment, so the user can see
 their other keys survived.
 
 Then ask once:
@@ -251,7 +251,10 @@ python3 <this skill dir>/../../scripts/workflow-file.py docs/agents/workflow.md 
 ```
 
 Its first line is `new`, `update` with what it changes, or `unchanged`. The rest is the file as it
-will stand. Report its word in §4. The script
+will stand. Report its word in §4. Exit 1 with a `✘` line means a list's last entry is not
+`claude`: the script still made any change it reported, and left that list exactly as it was.
+Name the list in §4 and say `/critique-spec` or `/review-pr` will stop on it until the user puts a
+`claude` entry last. The script
 ([workflow-file.py](../../scripts/workflow-file.py)) exists because the rules below are about
 leaving bytes alone, and code keeps that promise better than prose does.
 
@@ -287,7 +290,8 @@ here because a Critique is a read-and-report job.
 
 **An existing file is left alone, with two exceptions.** The user's choice of critics is the whole
 reason this file exists, so the script never touches the Specs line, the Critics list, an existing
-Security reviewers list, or a line it does not recognise. That includes a file with no `**Specs:**`
+Security reviewers list, a line it does not recognise, or the file's line endings. A list without a
+`claude` floor is reported, never repaired. That includes a file with no `**Specs:**`
 line: absent means `on`, and adding the line to someone's file is an edit they did not ask for. The
 two exceptions, both shown in the §2 draft before anything is written:
 
