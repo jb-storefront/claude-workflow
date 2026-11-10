@@ -109,7 +109,7 @@ Print one block per artifact, in the order of §3, each marked with what will ha
 ```
   write    .gitignore                 + .claude/worktrees/
   write    .worktreeinclude           + .env, + .env.local
-  merge    .claude/settings.json      + extraKnownMarketplaces.jb-workflow, + 2 enabledPlugins
+  merge    .claude/settings.json      + 2 extraKnownMarketplaces, + 2 enabledPlugins
   write    docs/specs/.gitkeep        new
   write    docs/agents/workflow.md    new (Specs: on, has a test Seam; 3 critics: codex, google, claude)
   copy     .claude/agents/            + pr-writer.md, + test-writer.md
@@ -163,6 +163,9 @@ file the next reader has to work out the meaning of.
   "extraKnownMarketplaces": {
     "jb-workflow": {
       "source": { "source": "github", "repo": "jb-storefront/claude-workflow" }
+    },
+    "claude-plugins-official": {
+      "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }
     }
   },
   "enabledPlugins": {
@@ -205,10 +208,14 @@ Compare the merged result against the original before writing. If they are byte-
 If the file exists and is not valid JSON, **stop**. Do not write. Report the parse error and the
 path: a settings file someone is mid-edit on is not this skill's to repair.
 
-Both entries above are first-party: the marketplace is this plugin's own, and `mattpocock-skills`
-comes from Anthropic's official marketplace and is a hard dependency of the loop. **Nothing about
-Codex goes in this file**, on any run. Enabling a third-party plugin for everyone who clones the
-repo is a decision for a human, and §4 prints the commands instead.
+Everything above is first-party: one marketplace is this plugin's own, the other is Anthropic's
+official one, and `mattpocock-skills` comes from it and is a hard dependency of the loop. This
+plugin's manifest declares that dependency, so a fresh Claude Code without the official marketplace
+refuses to load `workflow` at all; declaring the marketplace here is what lets a fresh clone
+resolve it.
+
+**Nothing about Codex goes in this file**, on any run. Enabling a third-party plugin for everyone
+who clones the repo is a decision for a human, and §4 prints the commands instead.
 
 **4. Create the specs directory.** `docs/specs/`, holding a `.gitkeep`.
 
