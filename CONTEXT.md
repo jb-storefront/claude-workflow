@@ -44,6 +44,10 @@ _Avoid_: screenshot, capture, visual
 A request raised on the tracker of the team that owns some infrastructure, for a change to it that this repository's work needs, such as a column, a policy, a setting or a secret. Never a Slice: it is the owning team's to plan and build.
 _Avoid_: ticket, infra PR, ops task
 
+**Copilot pass**:
+One GitHub Copilot code review of one head commit, recognised by the commit it reviewed. A PR is clean when its latest Copilot pass covers the head commit, no review thread is unresolved, and CI is green. Copilot only ever comments, so a pass is never an approval.
+_Avoid_: Copilot approval, Copilot review round
+
 **Port block**:
 The ten ports one Slice owns while its session runs, derived from its issue number so that parallel Slices never contend for one.
 _Avoid_: port range, port offset
