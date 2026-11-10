@@ -1,0 +1,39 @@
+{
+  "head_sha": "c0ffee2c0ffee2c0ffee2c0ffee2c0ffee2c0ffe",
+  "head_committed_at": "2026-11-01T10:00:00Z",
+  "requested_reviewers": [],
+  "reviews": [
+    {
+      "author": "copilot-pull-request-reviewer[bot]",
+      "state": "COMMENTED",
+      "commit_id": "c0ffee2c0ffee2c0ffee2c0ffee2c0ffee2c0ffe",
+      "submitted_at": "2026-11-01T10:03:40Z"
+    }
+  ],
+  "threads": [],
+  "checks": [
+    {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "validate",
+      "status": "completed",
+      "conclusion": "failure"
+    }
+  ],
+  "timeline": [
+    {
+      "event": "ready_for_review",
+      "actor": "jb-storefront",
+      "created_at": "2026-11-01T10:01:00Z"
+    },
+    {
+      "event": "review_requested",
+      "requested_reviewer": "Copilot",
+      "actor": "jb-storefront",
+      "created_at": "2026-11-01T10:01:02Z"
+    }
+  ]
+}

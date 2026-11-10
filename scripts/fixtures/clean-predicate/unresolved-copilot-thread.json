@@ -1,0 +1,43 @@
+{
+  "head_sha": "c0ffee2c0ffee2c0ffee2c0ffee2c0ffee2c0ffe",
+  "head_committed_at": "2026-11-01T10:00:00Z",
+  "requested_reviewers": [],
+  "reviews": [
+    {
+      "author": "copilot-pull-request-reviewer[bot]",
+      "state": "COMMENTED",
+      "commit_id": "c0ffee2c0ffee2c0ffee2c0ffee2c0ffee2c0ffe",
+      "submitted_at": "2026-11-01T10:03:40Z"
+    }
+  ],
+  "threads": [
+    {
+      "id": "PRRT_copilot1",
+      "author": "copilot-pull-request-reviewer",
+      "resolved": false,
+      "path": "scripts/clean-predicate.py",
+      "line": 42,
+      "url": "https://github.com/o/r/pull/1#discussion_r1"
+    }
+  ],
+  "checks": [
+    {
+      "name": "validate",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "timeline": [
+    {
+      "event": "ready_for_review",
+      "actor": "jb-storefront",
+      "created_at": "2026-11-01T10:01:00Z"
+    },
+    {
+      "event": "review_requested",
+      "requested_reviewer": "Copilot",
+      "actor": "jb-storefront",
+      "created_at": "2026-11-01T10:01:02Z"
+    }
+  ]
+}
