@@ -69,7 +69,7 @@ ignoring. A committed `.env.example` is therefore never in the list, correctly: 
 worktree already. **Read none of them.** Their paths are all this skill needs and their contents
 are secrets.
 
-**Agent templates.** `/finalize-pr` finds agents by the role in their frontmatter, not by filename,
+**Agent templates.** `/finalize-pr` and `/review-pr` find agents by the role in their frontmatter, not by filename,
 because a project names them for its domain (`ucp-demo-code-reviewer`). So read the `name` and
 `description` of every file in `.claude/agents/` and decide, per role, whether the repo already has
 an agent that writes PR descriptions, one that reviews code, and one that writes tests. A repo that
@@ -317,7 +317,7 @@ domain knowledge that makes a reviewer worth having. Skip it and name the file t
 Each template carries exactly one `{{DOMAIN}}` placeholder. Leave it in place. Filling it in is
 the user's job, and §4 tells them so. Offer to name the copies for the repo
 (`ucp-demo-pr-writer.md`) since that is what real projects do, but do not require it:
-`/finalize-pr` matches on the role in the frontmatter and does not care about the filename.
+`/finalize-pr` and `/review-pr` match on the role in the frontmatter and do not care about the filename.
 
 **7. Append the pointer block.** Pick the file the same way `/setup-matt-pocock-skills` does, so
 the two skills never write to different files in the same repo:
@@ -335,7 +335,7 @@ Append:
 
 One Spec per feature, cut into Slices that parallel sessions build in their own worktrees:
 `/anchor-spec` → `/critique-spec` → `/to-tickets` → `/dispatch-slices` → per Slice
-`/start-issue` → `/acceptance-tests` → `/tdd` → `/finalize-pr` → `/merge-stack`.
+`/start-issue` → `/acceptance-tests` → `/tdd` → `/finalize-pr` → `/review-pr` → `/merge-stack`.
 
 Specs live in `docs/specs/`, one file per Spec, committed to the default branch. The Spec issue is
 only its handle, and the file wins when the two disagree.

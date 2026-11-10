@@ -482,6 +482,39 @@ contract.
 
 Above ten Criteria on one Slice, `/finalize-pr` warns. It never blocks on the count.
 
+The `/finalize-pr` review comment carries no code-review and no spec-drift section. Those belong to
+`/review-pr`, which `/finalize-pr` hands a Not blocking PR to.
+
+## The `/review-pr` summary comment
+
+`/review-pr` posts one issue comment per run, never edits an earlier one, and is the only skill that
+marks a PR ready. The first line, the `Head:` and `Reviewer:` lines, and the `###` headings are read
+by machines; keep their spelling.
+
+```markdown
+## /review-pr — {Ready | Draft}
+
+Head: `{the reviewed head commit, first 7}`
+Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved | changes_requested}, {C} Critical, {H} High
+
+### Blocking findings
+- High — `src/auth/client.ts:88` — the token is logged in plain text
+- (or "None.")
+
+### Spec drift (advisory)
+- `docs/specs/60-loyalty-earn-and-burn.md`, {behaviour the diff changes}, `path:line`
+- (or "None." / "No implemented Specs match the changed paths.")
+
+### Outcome
+{Marked ready. | Left as a draft: {why}.}
+
+<details><summary>Full reviewer report</summary> … </details>
+```
+
+`Ready` means the reviewer named on the `Reviewer:` line reviewed the commit on the `Head:` line and
+nothing it found blocks. A later push needs a later summary: an earlier `Ready` says nothing about a
+commit it did not see.
+
 ## The port block
 
 A fan-out puts several sessions on one machine at the same time. Each has its own worktree, so they
