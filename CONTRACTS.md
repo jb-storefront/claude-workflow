@@ -117,7 +117,7 @@ each exactly one line:
 
 Not in the Criteria, not in the Decisions, not anywhere. A path in a Spec is a promise about
 structure that the next refactor breaks silently, and it is exactly what makes a Spec rot. Name
-behaviour and name Seams. `/finalize-pr` finds the Specs a diff touches by matching Spec slugs and
+behaviour and name Seams. `/review-pr` finds the Specs a diff touches by matching Spec slugs and
 `CONTEXT.md` terms against changed paths, which is why it needs no paths written down.
 
 ## Status, and who writes each value

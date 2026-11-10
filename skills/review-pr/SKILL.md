@@ -32,6 +32,8 @@ git fetch origin {headRefName}
 ```
 
 - `{head}` = `headRefOid`. That is the commit this run reviews and the one the summary names.
+- `{default}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Never assume
+  `main`.
 - `git branch --show-current` must be `{headRefName}`, and `git rev-parse HEAD` must equal
   `{head}`. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
   all mean a reviewer reading the working tree would read code that is not the PR. Say which
@@ -131,7 +133,8 @@ Its two axes are the two things the missing agent would have done: **Spec** is t
   behaviour, the same as an agent's `spec-drift:` lines. Advisory, like any other drift finding.
 - Its **Standards**-axis Critical and High findings count the way §4 counts `changes_requested`.
 - §5's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
-  which one produced the findings.
+  which one produced the findings. Its verdict is `changes_requested` when the **Standards** axis
+  holds any Critical or High finding and `approved` otherwise, with those two counts beside it.
 
 This is what a repo with no reviewer agent gets instead of the note that nothing was enforced.
 

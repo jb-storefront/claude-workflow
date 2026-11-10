@@ -79,10 +79,15 @@ def check_54_c1(pr, _):
         return False, f"latest /finalize-pr review is {verdict_of(fin)}"
     if re.search(r"^###\s+Code-reviewer", fin["body"], re.M | re.I):
         return False, "the /finalize-pr review still carries a code-reviewer section"
+    if re.search(r"^###\s+Spec drift", fin["body"], re.M | re.I):
+        return False, "the /finalize-pr review still carries a spec-drift section"
     after = [c for c in pr.summaries if c["created_at"] >= fin["submitted_at"]]
     if not after:
         return False, "no /review-pr summary posted after the /finalize-pr review"
     summary = after[-1]["body"]
+    reviewed = field(summary, "Head")
+    if not reviewed or not pr.head.startswith(reviewed):
+        return False, f"the /review-pr summary reviewed {reviewed}, head is {pr.head}"
     reviewer = field(summary, "Reviewer")
     if not reviewer:
         return False, "the /review-pr summary names no reviewer"
@@ -113,10 +118,13 @@ def check_54_c3(pr, finding):
     if not pr.summaries:
         return False, "no /review-pr summary on the PR"
     summary = pr.summaries[-1]["body"]
+    reviewed = field(summary, "Head")
+    if not reviewed or not pr.head.startswith(reviewed):
+        return False, f"the latest /review-pr summary reviewed {reviewed}, head is {pr.head}"
     if REVIEW_HEAD.match(first_line(summary)).group(1) != "Draft":
         return False, "the latest /review-pr summary does not report Draft"
     blocking = section(summary, "Blocking findings")
-    if not blocking or blocking == "None.":
+    if not blocking or re.fullmatch(r"(?:-\s*)?None\.", blocking):
         return False, "the summary lists no blocking finding"
     if finding and finding not in blocking:
         return False, f"no blocking finding names {finding}"
