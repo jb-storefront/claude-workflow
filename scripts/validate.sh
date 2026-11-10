@@ -22,6 +22,7 @@ echo "== scripts"
 if ! python3 scripts/test-prune-plugin-entries.py; then fail=1; fi
 if ! python3 scripts/test-chain-reference.py; then fail=1; fi
 if ! python3 scripts/test-clean-predicate.py; then fail=1; fi
+if ! python3 scripts/test-workflow-file.py; then fail=1; fi
 
 # Neither manifest can see the other, so strict validation passes on a version
 # disagreement that makes the marketplace advertise a release nobody shipped.
