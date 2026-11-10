@@ -3,53 +3,60 @@
 Personal [Claude Code](https://code.claude.com) skills for a spec-to-merge loop over
 GitHub-tracked vertical slices, each running in its own **git worktree** on your machine.
 
-## The loop
-
-```
-/grill-with-docs   →  reach shared understanding, update CONTEXT.md and ADRs inline
-/to-spec           →  publish the spec as a tracker issue
-/to-tickets        →  break the spec into independently-grabbable slice issues
-/dispatch-slices   →  fan the unblocked slices out to parallel background sessions  ← this plugin
-  └ per slice, inside its own worktree:
-      /start-issue →  claim, branch, install deps; draft PR on the first commit      ← this plugin
-      /tdd         →  red-green-refactor to the acceptance criteria
-      /frames      →  capture what a [manual] criterion says a person would see      ← this plugin
-      /finalize-pr →  gates, PR description, code review, ready-for-human            ← this plugin
-/merge-stack       →  land the batch in dependency order, tearing down worktrees     ← this plugin
-```
-
-`/grill-with-docs`, `/to-spec`, `/to-tickets`, and `/tdd` come from
-[mattpocock/skills](https://github.com/mattpocock/skills); this plugin supplies the four that
-surround them, plus `/frames` for the screens a reviewer would otherwise have to build the branch
-to see, and `/rebase-pr` and `/merge-pr` for the single-PR cases.
-
-Four more sit beside the loop rather than inside it:
-
-- **`/create-bug`** and **`/create-feature`** file ad hoc work as a lone Slice, shaped so the loop
-  runs it like one `/to-tickets` published, with its Seam already written. Work that turns out to
-  be a Spec goes to `/grill-with-docs` instead.
-
-- **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
-  intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.
-  It answers in slices first and quotes a band, never a point estimate.
-- **`/retro`** reviews a finished session and proposes changes to the agent's *environment* —
-  navigation pointers, automated checks, reviewer rules — rather than to the code.
-
 ## Install
 
+Three commands, then restart Claude Code (or run `/reload-plugins`):
+
 ```bash
+claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin marketplace add jb-storefront/claude-workflow
 claude plugin install workflow@jb-workflow
 ```
 
-Declaring the plugin in the repo's committed `.claude/settings.json` makes it load in every
-worktree of that repo, and for everyone who clones it:
+That one install brings in both halves of the workflow. The loop leans on four skills from
+[mattpocock/skills](https://github.com/mattpocock/skills) (`/grill-with-docs`, `/to-spec`,
+`/to-tickets`, `/tdd`), and this plugin declares `mattpocock-skills@claude-plugins-official` as a
+dependency, so Claude Code installs and enables it alongside. The first `marketplace add` is there
+because a fresh Claude Code does not always know Anthropic's official marketplace, and without it
+the dependency cannot resolve and **this plugin refuses to load**.
+
+Check it worked:
+
+```bash
+claude plugin list
+```
+
+Both `workflow@jb-workflow` and `mattpocock-skills@claude-plugins-official` should say
+`enabled`. If `workflow` says `failed to load` with *Dependency ... is not installed*, the official
+marketplace is missing: run the first command above, then `claude plugin install
+mattpocock-skills@claude-plugins-official`.
+
+Already had `workflow` installed before 2.2.0 without Pocock's skills? `claude plugin marketplace
+update jb-workflow`, then `claude plugin update workflow@jb-workflow`.
+
+## Set up a repo
+
+Run once in the **main checkout** of each repo that will use the loop, and commit what they write:
+
+```
+/setup-matt-pocock-skills   →  issue tracker, triage labels, domain-doc layout (docs/agents/)
+/setup-workflow             →  everything in "What a repo needs" below, plus agent templates
+```
+
+Order matters: `/setup-workflow` checks that Pocock's setup has run and tells you if it has not.
+Both explore first, show a draft, and write only after you confirm, and both are safe to re-run.
+
+`/setup-workflow` also commits the plugin block into `.claude/settings.json`, so anyone who clones
+the repo is offered both plugins when they first trust the workspace:
 
 ```json
 {
   "extraKnownMarketplaces": {
     "jb-workflow": {
       "source": { "source": "github", "repo": "jb-storefront/claude-workflow" }
+    },
+    "claude-plugins-official": {
+      "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }
     }
   },
   "enabledPlugins": {
@@ -59,12 +66,50 @@ worktree of that repo, and for everyone who clones it:
 }
 ```
 
+## The loop
+
+```
+/grill-with-docs     →  reach shared understanding, update CONTEXT.md and ADRs inline   (Pocock)
+/to-spec             →  publish the spec as a tracker issue                             (Pocock)
+/anchor-spec         →  persist the Spec file with numbered Given/When/Then Criteria
+/critique-spec       →  a model from another vendor doubts the Spec before it is cut up
+/to-tickets          →  break the spec into independently-grabbable slice issues        (Pocock)
+/dispatch-slices     →  fan the unblocked slices out to parallel background sessions
+  └ per slice, inside its own worktree:
+      /start-issue      →  claim, branch, install deps; draft PR on the first commit
+      /acceptance-tests →  one failing test per Criterion, at the Slice's Seam
+      /tdd              →  red-green-refactor to the acceptance criteria               (Pocock)
+      /frames           →  capture what a [manual] criterion says a person would see
+      /finalize-pr      →  gates, PR description, code review, ready-for-human
+/merge-stack         →  land the batch in dependency order, tearing down worktrees
+```
+
+Everything not marked (Pocock) ships in this plugin, as do `/rebase-pr` and `/merge-pr` for the
+single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/anchor-spec` and
+`/critique-spec`, and `/dispatch-slices` treats every Slice as a lone one.
+
+`/critique-spec` is best with Codex or Antigravity installed, so the doubt comes from another
+vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which
+are missing and prints the commands. Without them the Claude critic still runs.
+
+Four more sit beside the loop rather than inside it:
+
+- **`/create-bug`** and **`/create-feature`** file ad hoc work as a lone Slice, shaped so the loop
+  runs it like one `/to-tickets` published, with its Seam already written. Work that turns out to
+  be a Spec goes to `/grill-with-docs` instead.
+- **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
+  intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.
+  It answers in slices first and quotes a band, never a point estimate.
+- **`/retro`** reviews a finished session and proposes changes to the agent's *environment*
+  (navigation pointers, automated checks, reviewer rules) rather than to the code.
+
 ## What a repo needs before the first fan-out
 
-- **`.claude/worktrees/` in `.gitignore`** — that is where Claude Code puts them, and without the
+`/setup-workflow` does all of this except the last two bullets. Listed here so you know what it
+did, or can do it by hand.
+
+- **`.claude/worktrees/` in `.gitignore`.** That is where Claude Code puts them, and without the
   ignore every worktree's files show up as untracked noise in your main checkout.
-- **Workspace trust accepted once.** Run `claude` in the repo and accept the dialog. Worktrees live
-  inside the trusted checkout, so background sessions never ask again.
 - **A `.worktreeinclude`** if the project has gitignored config the slices need. A worktree is a
   fresh checkout: `.env` and friends are not there unless this file copies them.
 
@@ -73,12 +118,14 @@ worktree of that repo, and for everyone who clones it:
   .env.local
   ```
 
+- **Workspace trust accepted once.** Run `claude` in the repo and accept the dialog. Worktrees live
+  inside the trusted checkout, so background sessions never ask again.
 - **`gh` authenticated with push access to the repo.** Not a convenience: `/start-issue` claims
   its issue by adding an assignee, and GitHub silently ignores assignees without push access. The
   skill reads the assignment back and stops, so without push access every dispatched session dies
   on its first step.
 
-Dependencies are not a precondition — `/start-issue` installs them in each worktree from the
+Dependencies are not a precondition: `/start-issue` installs them in each worktree from the
 project's lockfile.
 
 `/estimate-from-history` additionally wants `.claude/calibration/calibration.json`, committed. It
