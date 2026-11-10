@@ -92,11 +92,14 @@ single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/anchor
 vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which
 are missing and prints the commands. Without them the Claude critic still runs.
 
-Three more sit beside the loop rather than inside it:
+Four more sit beside the loop rather than inside it:
 
 - **`/create-bug`** and **`/create-feature`** file ad hoc work as a lone Slice, shaped so the loop
   runs it like one `/to-tickets` published, with its Seam already written. Work that turns out to
   be a Spec goes to `/grill-with-docs` instead.
+- **`/create-infra-request`** raises an Infrastructure request on the team that owns the
+  infrastructure a change needs, in the tracker and shape the repo's `docs/agents/infrastructure.md`
+  declares, instead of a pull request on their repository or a resource changed by hand.
 - **`/estimate-from-history`** sizes work against the repo's own merged PRs instead of human
   intuition, which is wrong by an order of magnitude when the work is done by parallel sessions.
   It answers in slices first and quotes a band, never a point estimate.

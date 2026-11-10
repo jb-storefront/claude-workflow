@@ -40,6 +40,10 @@ _Avoid_: story, demo page, fixture page
 The image of a Scene that a `[manual]` Criterion is proven by, named after that Criterion's id. Stands to a manual Criterion as a test stands to an automated one.
 _Avoid_: screenshot, capture, visual
 
+**Infrastructure request**:
+A request raised on the tracker of the team that owns some infrastructure, for a change to it that this repository's work needs, such as a column, a policy, a setting or a secret. Never a Slice: it is the owning team's to plan and build.
+_Avoid_: ticket, infra PR, ops task
+
 **Port block**:
 The ten ports one Slice owns while its session runs, derived from its issue number so that parallel Slices never contend for one.
 _Avoid_: port range, port offset
