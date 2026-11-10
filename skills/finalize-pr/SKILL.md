@@ -383,7 +383,8 @@ test that carries it.
 `{owner}/{repo}` is the Slice's own, read in §2. Ticking the wrong repository's issue 53 is a write
 that succeeds and says something false.
 
-If nothing is verified, skip the edit and the comment.
+Read the body back and check each ticked line now reads `- [x]`. If nothing is verified, skip the
+edit and the comment.
 
 ## 13. Post the review to the PR
 
@@ -446,8 +447,11 @@ the same answer: which standard was this held to, and why that one.
   summary, and marks the PR ready if the review does not block. Do not mark the PR ready here, and
   do not background the hand-off: the session that owns the worktree is the one that can fix what
   the review finds.
-- **Blocking** → do not invoke `/review-pr`. The PR stays a draft. Print the fix list locally; do
-  not post additional GitHub noise.
+- **Blocking** → do not invoke `/review-pr`. The PR must be a draft: if an earlier `/review-pr`
+  marked it ready, return it with `gh pr ready {pr_number} --undo` and read
+  `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` back as `true`. A PR failing its
+  Criteria must not stay ready, because `/merge-pr`'s draft gate is what stops it landing. Print the
+  fix list locally; do not post additional GitHub noise.
 
 ## 15. Local summary
 
@@ -486,13 +490,13 @@ tear them down once the PR lands; nothing here should remove either.
 - Steps run sequentially. Step 9 depends on Step 8's Frames. Step 14 depends on Step 11's verdict.
 - Never `--approve`; this skill writes context, the human pulls the merge trigger.
 - Never mark the PR ready. `/review-pr` is the only skill that does.
-- Re-running is idempotent: gates are stateless, the PR body / review comment / issue body overwrite cleanly.
+- Re-running is safe: gates are stateless, and the PR body and issue body overwrite cleanly. Each run posts a new review comment, and a Not blocking run posts a new `/review-pr` summary too.
 - Don't modify source files. The PR-writer agent may modify the PR body; the AI-discipline pass never touches code.
 - If you stop, surface why and what to run next.
 - A gate that did not run is never reported as a gate that passed. Whether it was a tool the project does not configure or a toolchain this skill does not know, §15 names it.
 - `verified` is the only state that means the behaviour holds. Never report a Criterion verified on diff evidence alone: that is `weak`, and the distinction is the whole point of this skill.
 - `weak` is reported as `weak` in every repository. The test Seam changes what `weak` costs in §11, never what §10 calls it.
 - `unverified` blocks everywhere. No test Seam is a reason to hold `weak` to a lower bar; it is never a reason to accept a Criterion with no evidence at all.
-- A GitHub write that returns success is not evidence it took effect. §1 and §12 say what to read back.
+- A GitHub write that returns success is not evidence it took effect. §1, §12 and §14 say what to read back.
 - Read the Slice from the repository `closingIssuesReferences` names, never from the one holding the pull request. Every `gh issue` call in this skill passes `--repo`.
 - A Frame never moves a Criterion out of `manual`. A declared Frame that did not get captured blocks, and that is a gate, not a state.

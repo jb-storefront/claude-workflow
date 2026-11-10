@@ -506,13 +506,13 @@ Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved
 - (or "None." / "No implemented Specs match the changed paths.")
 
 ### Outcome
-{Marked ready. | Left as a draft: {why}.}
+{Marked ready. | Left as a draft: {why}. | Returned to draft: {why}.}
 
 <details><summary>Full reviewer report</summary> … </details>
 ```
 
-`Ready` means the reviewer named on the `Reviewer:` line reviewed the commit on the `Head:` line and
-nothing it found blocks. A later push needs a later summary: an earlier `Ready` says nothing about a
+`Ready` means the reviewer named on the `Reviewer:` line reviewed the commit on the `Head:` line,
+nothing it found blocks, and the PR read back as ready before the comment was posted. A later push needs a later summary: an earlier `Ready` says nothing about a
 commit it did not see.
 
 ## The port block

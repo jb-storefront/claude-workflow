@@ -28,7 +28,8 @@ def test_54_c6_finalize_pr_has_no_step_that_marks_the_pr_ready():
     hits = [
         f"line {n}: {line.strip()}"
         for n, line in enumerate(text.splitlines(), start=1)
-        if re.search(r"\bgh pr ready\b", line)
+        # `gh pr ready --undo` returns a PR to draft, the opposite of marking it ready.
+        if re.search(r"\bgh pr ready\b(?![^`\n]*--undo)", line)
     ]
     return not hits, "; ".join(hits)
 

@@ -129,10 +129,10 @@ Specs above as its spec source, and pass the same drift instruction.
 Its two axes are the two things the missing agent would have done: **Spec** is this drift check, and
 **Standards** is the architectural pass. It returns findings rather than sentinels, so:
 
-- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §5, each naming the Spec and the
+- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §6, each naming the Spec and the
   behaviour, the same as an agent's `spec-drift:` lines. Advisory, like any other drift finding.
 - Its **Standards**-axis Critical and High findings count the way §4 counts `changes_requested`.
-- §5's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
+- §6's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
   which one produced the findings. Its verdict is `changes_requested` when the **Standards** axis
   holds any Critical or High finding and `approved` otherwise, with those two counts beside it.
 
@@ -149,57 +149,40 @@ blocks.
 Never block on a spec-drift finding. It is a question for the human, and the heuristic that raised
 it over-selects by design. Medium and Low findings are listed, not blocking.
 
-## 5. Post the summary
+## 5. Mark ready, or keep it a draft
 
-One comment, via `gh pr comment {pr_number} --body-file -` from a heredoc. Its shape is in
-`CONTRACTS.md`, under **The `/review-pr` summary comment**, because other skills and the tests read
-it:
-
-```
-## /review-pr — {Ready | Draft}
-
-Head: `{head, first 7}`
-Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved | changes_requested}, {C} Critical, {H} High
-
-### Blocking findings
-- {Critical | High} — `path:line` — {the finding, one line}
-- (or "None.")
-
-### Spec drift (advisory)
-- `docs/specs/60-loyalty-earn-and-burn.md`, {behaviour the diff changes}, `path:line`
-- (or "None." / "No implemented Specs match the changed paths.")
-
-### Outcome
-{Marked ready. | Left as a draft: {the blocking findings above | why}.}
-
-<details><summary>Full reviewer report</summary>
-
-{the reviewer's report, sentinel lines included}
-
-</details>
-```
-
-Every Critical and High finding goes under `### Blocking findings` with its `path:line`, so the
-person picking up a Draft PR does not have to open the full report to learn what stopped it.
-
-Read it back: `gh pr view {pr_number} --json comments --jq '.comments[-1].body'` must open with
-`## /review-pr`. Passing `@-` to `--body` instead of `--body-file -` posts the two characters `@-`
-and returns success, which is how a summary disappears without an error.
-
-Post a new comment on every run; never edit an earlier one. Each summary records the head it
-reviewed, and the history of which commit passed and which did not is the point.
-
-## 6. Mark ready, or keep it a draft
+Set the PR's state before the summary is written, so the summary reports the state the PR is
+actually in rather than the one this run meant to leave it in.
 
 - **Not blocking** → `gh pr ready {pr_number}` when `isDraft` is true, then **verify**:
   `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` must be `false`. If it still
-  reads `true`, stop and report: `/merge-pr` hard-stops on drafts, so a PR that silently stayed a
-  draft is a PR nobody can land.
+  reads `true`, the outcome is `Draft` with the reason that `gh pr ready` did not take; post that
+  summary in §6, then stop and report. `/merge-pr` hard-stops on drafts, so a PR that silently
+  stayed a draft is a PR nobody can land.
 - **Blocking** → the PR stays a draft. If it was already ready (a re-run after a push), return it to
   draft with `gh pr ready {pr_number} --undo` and read `.draft` back as `true`. A ready PR whose head
   blocks would tell a human it has been reviewed clean when it has not.
 
 `{owner}` and `{repo}` are **literal** in `gh api` paths: `gh` fills them from the current repo.
+
+## 6. Post the summary
+
+One comment, via `gh pr comment {pr_number} --body-file -` from a heredoc. Its shape is in
+`CONTRACTS.md`, under **The `/review-pr` summary comment**, because other skills and the tests read
+it. The heading's `Ready` or `Draft` and the `### Outcome` line are the state §5 read back, never
+the state it intended.
+
+Every Critical and High finding goes under `### Blocking findings` with its `path:line`, so the
+person picking up a Draft PR does not have to open the full report to learn what stopped it. Put
+the reviewer's whole report, sentinel lines included, in the closing `<details>` block.
+
+Read it back. `gh pr comment` prints the new comment's URL, ending `#issuecomment-{id}`; then
+`gh api "repos/{owner}/{repo}/issues/comments/{id}" --jq '.body'` must open with `## /review-pr`.
+Passing `@-` to `--body` instead of `--body-file -` posts the two characters `@-` and returns
+success, which is how a summary disappears without an error.
+
+Post a new comment on every run; never edit an earlier one. Each summary records the head it
+reviewed, and the history of which commit passed and which did not is the point.
 
 ## 7. Local summary
 
@@ -228,7 +211,7 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
   earlier summary passed.
-- A GitHub write that returns success is not evidence it took effect. §5 and §6 say what to read back.
+- A GitHub write that returns success is not evidence it took effect. §5 and §6 say what to read back, and §6 never claims a state §5 did not read back.
 - Read the Slice from the repository `closingIssuesReferences` names, with `--repo`.
 - Do not modify source files. Fixing what the review found is the session's next step, not this
   skill's.
