@@ -47,15 +47,15 @@ def reason(result, kind):
     return next(r for r in result["reasons"] if r["kind"] == kind)
 
 
-def c1_clean(_):
+def c1_clean():
     return expect(judge("clean"), "clean")
 
 
-def c2_pending_after_request(_):
+def c2_pending_after_request():
     return expect(judge("pending-after-request"), "pending", "copilot-pass-pending")
 
 
-def c3_stale_pass(_):
+def c3_stale_pass():
     r = judge("stale-pass")
     ok, why = expect(r, "not-clean", "stale-copilot-pass")
     if not ok:
@@ -67,7 +67,7 @@ def c3_stale_pass(_):
     return True, ""
 
 
-def c4_unresolved_copilot_thread(_):
+def c4_unresolved_copilot_thread():
     r = judge("unresolved-copilot-thread")
     ok, why = expect(r, "not-clean", "unresolved-copilot-thread")
     if not ok:
@@ -77,7 +77,7 @@ def c4_unresolved_copilot_thread(_):
     return True, ""
 
 
-def c5_unresolved_human_thread(_):
+def c5_unresolved_human_thread():
     r = judge("unresolved-human-thread")
     ok, why = expect(r, "not-clean", "unresolved-human-thread")
     if not ok:
@@ -87,7 +87,7 @@ def c5_unresolved_human_thread(_):
     return True, ""
 
 
-def c6_failing_check(_):
+def c6_failing_check():
     r = judge("failing-check")
     ok, why = expect(r, "not-clean", "failing-check")
     if not ok:
@@ -97,7 +97,7 @@ def c6_failing_check(_):
     return True, ""
 
 
-def c7_pending_check(_):
+def c7_pending_check():
     r = judge("pending-check")
     ok, why = expect(r, "pending", "pending-check")
     if not ok:
@@ -107,15 +107,15 @@ def c7_pending_check(_):
     return True, ""
 
 
-def c8_no_pass_ever(_):
+def c8_no_pass_ever():
     return expect(judge("no-pass-ever"), "not-clean", "no-copilot-pass")
 
 
-def c9_resolved_earlier_thread(_):
+def c9_resolved_earlier_thread():
     return expect(judge("resolved-earlier-thread"), "clean")
 
 
-def c10_both_logins_are_copilot(_):
+def c10_both_logins_are_copilot():
     # The request names `Copilot`: were it not recognised, this would be no-copilot-pass.
     ok, why = expect(judge("pending-after-request"), "pending", "copilot-pass-pending")
     if not ok:
@@ -131,18 +131,40 @@ def c10_both_logins_are_copilot(_):
     return True, ""
 
 
-def c11_runs_in_validate(_):
+def c11_runs_in_validate():
     validate = (REPO / "scripts" / "validate.sh").read_text()
     if not re.search(r"^[^#\n]*python3 scripts/test-clean-predicate\.py", validate, re.M):
         return False, "scripts/validate.sh does not run scripts/test-clean-predicate.py"
     return True, ""
 
 
-def c12_context_defines_copilot_pass(_):
+def c12_context_defines_copilot_pass():
     context = (REPO / "CONTEXT.md").read_text()
     m = re.search(r"^\*\*Copilot pass\*\*:\n(.+)$", context, re.M)
     if not m or not m.group(1).strip():
         return False, "CONTEXT.md has no **Copilot pass** definition"
+    return True, ""
+
+
+def answered_request_is_not_pending():
+    # The head was committed before the request but pushed after the pass that
+    # answered it, so a committer date alone would wait on a pass already here.
+    return expect(judge("answered-request-before-push"), "not-clean", "stale-copilot-pass")
+
+
+def timestamps_compare_as_instants():
+    return expect(judge("mixed-timestamp-formats"), "pending", "copilot-pass-pending")
+
+
+def incomplete_snapshot_exits_2():
+    proc = subprocess.run(
+        [sys.executable, str(PREDICATE)],
+        input='{"head_sha": "c0ffee2"}',
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 2:
+        return False, f"exit {proc.returncode}, expected 2: {proc.stderr.strip()[-200:]}"
     return True, ""
 
 
@@ -159,12 +181,15 @@ CASES = [
     ("#52 C10 Copilot and copilot-pull-request-reviewer[bot] both count as Copilot", c10_both_logins_are_copilot),
     ("#52 C11 the validate script runs these cases", c11_runs_in_validate),
     ("#52 C12 CONTEXT.md defines Copilot pass", c12_context_defines_copilot_pass),
+    ("a request a Copilot pass already answered is not pending", answered_request_is_not_pending),
+    ("timestamps with offsets and fractions compare as instants", timestamps_compare_as_instants),
+    ("a snapshot missing a field exits 2", incomplete_snapshot_exits_2),
 ]
 
 
 def case(label, check):
     try:
-        ok, why = check(None)
+        ok, why = check()
     except Exception as exc:  # a crash is a failed case, not a crashed suite
         ok, why = False, f"raised {exc!r}"
     print(f"  {'ok ' if ok else 'BAD'}  {label}" + ("" if ok else f": {why}"))
