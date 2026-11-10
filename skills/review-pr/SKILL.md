@@ -28,16 +28,23 @@ detached agent: the session that can fix what the review finds is the one that s
 
 ```bash
 gh pr view {pr_number} --json number,title,url,isDraft,headRefName,headRefOid,baseRefName,closingIssuesReferences,body
-git fetch origin {headRefName}
+git fetch origin {headRefName} {default}
 ```
 
+- `{default}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`, read before the
+  fetch. Never assume `main`. The fetch keeps `origin/{default}` current, because the §3 fallback
+  takes its fixed point from it.
 - `{head}` = `headRefOid`. That is the commit this run reviews and the one the summary names.
-- `{default}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Never assume
-  `main`.
 - `git branch --show-current` must be `{headRefName}`, and `git rev-parse HEAD` must equal
   `{head}`. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
   all mean a reviewer reading the working tree would read code that is not the PR. Say which
-  (`git status -sb` shows ahead/behind) and what to run.
+  (`git status -sb` shows ahead/behind) and what to run. Return the PR to draft first, as below.
+
+**A stop is never a pass.** Wherever this skill stops before §5 (a checkout that is not the PR's
+head, or a reviewer that returned no sentinels), it posts no summary, and if `isDraft` is false it
+returns the PR to draft with `gh pr ready {pr_number} --undo` and reads `.draft` back as `true`
+(§5 has the read-back). A PR left ready on a head nobody reviewed says the opposite of what
+happened.
 
 ## 2. Read the Slice's Parent and the repository's Specs line
 
@@ -114,8 +121,9 @@ HIGH_COUNT: <number>
 VERDICT must be "approved" only if both counts are 0.
 ```
 
-Parse the sentinels. If absent, **stop** and report the malformed response. Post nothing and mark
-nothing: a review with no verdict is a review that did not happen.
+Parse the sentinels. If absent, **stop** and report the malformed response. Post nothing, and
+return a ready PR to draft as §1 describes: a review with no verdict is a review that did not
+happen.
 
 Say "no implemented Specs match" explicitly rather than dropping the paragraph: a reviewer told
 there is nothing to drift from answers differently from a reviewer told nothing at all.
@@ -207,7 +215,7 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - Never `--approve`. This skill comments; the human pulls the merge trigger.
 - The reviewer is always a fresh-context agent or skill, never this session's own reading of the
   diff.
-- Absent sentinels stop the run. Nothing is posted and the PR's state is not changed.
+- Absent sentinels stop the run. Nothing is posted, and a ready PR goes back to draft (§1).
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
   earlier summary passed.
