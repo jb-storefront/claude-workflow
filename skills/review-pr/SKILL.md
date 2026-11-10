@@ -132,7 +132,9 @@ there is nothing to drift from answers differently from a reviewer told nothing 
 
 Invoke Pocock's `code-review` skill through the Skill tool, `skill: "mattpocock-skills:code-review"`,
 with the merge-base as its fixed point: `git merge-base origin/{default} HEAD`. Name the candidate
-Specs above as its spec source, and pass the same drift instruction.
+Specs above as its spec source, and pass the same drift instruction. Ask it to grade every **Standards**
+finding Critical, High, Medium or Low: its own brief only separates hard violations from judgement
+calls, and an ungraded finding cannot block, so without the grades the fallback always approves.
 
 Its two axes are the two things the missing agent would have done: **Spec** is this drift check, and
 **Standards** is the architectural pass. It returns findings rather than sentinels, so:
