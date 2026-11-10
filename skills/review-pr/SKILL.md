@@ -180,8 +180,8 @@ Every Critical and High finding goes under `### Blocking findings` with its `pat
 person picking up a Draft PR does not have to open the full report to learn what stopped it.
 
 Read it back: `gh pr view {pr_number} --json comments --jq '.comments[-1].body'` must open with
-`## /review-pr`. `gh pr comment --body @-` posts the two characters `@-` and returns success, which
-is how a summary disappears without an error.
+`## /review-pr`. Passing `@-` to `--body` instead of `--body-file -` posts the two characters `@-`
+and returns success, which is how a summary disappears without an error.
 
 Post a new comment on every run; never edit an earlier one. Each summary records the head it
 reviewed, and the history of which commit passed and which did not is the point.
