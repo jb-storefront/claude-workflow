@@ -284,7 +284,34 @@ def unreadable_path_fails_cleanly(root):
     return True, ""
 
 
+def write_keeps_file_mode(root):
+    f = migrated_copy_of_this_repo(root)
+    f.chmod(0o644)
+    run(f, "--write")
+    mode = f.stat().st_mode & 0o777
+    if mode != 0o644:
+        return False, f"mode became {oct(mode)}, was 0o644"
+    fresh = root / "new" / "workflow.md"
+    run(fresh, "--write")
+    if fresh.stat().st_mode & 0o044 != 0o044:
+        return False, f"a new file is not group/other readable: {oct(fresh.stat().st_mode & 0o777)}"
+    return True, ""
+
+
+def lone_critic_is_flagged(root):
+    f = root / "workflow.md"
+    f.write_text("**Critic:** codex, default\n")
+    proc = run(f, "--write")
+    if proc.returncode == 0:
+        return False, "exited 0 on a Critic line with no Fallback"
+    if "**Critic:** codex, default\n" not in f.read_text():
+        return False, "the lone Critic line was rewritten"
+    return True, ""
+
+
 CASES = [
+    ("--write keeps an existing file's mode, and a new file is readable", write_keeps_file_mode),
+    ("a lone old-shape Critic line is flagged and left alone", lone_critic_is_flagged),
     ("CRLF line endings survive", crlf_survives),
     ("content right after Critics stays its own paragraph", content_after_critics_stays_separate),
     ("Fallback above Critic converts without a stray blank line",

@@ -9,8 +9,10 @@ CONTRACTS.md describes the file's shape.
 
 An existing file is the repo's own choice of critics and security reviewers,
 so every line this script does not add is kept byte for byte, line endings
-included. Exit 1 means a list has no `claude` floor: the file is still left
-alone, because fixing someone's chain is their call.
+included. Exit 1 with a `✘` line means something here cannot be fixed without
+choosing for the user (a list with no `claude` floor, a lone old-shape Critic
+line) or the file could not be read or written. Any change already reported
+was still made; the flagged lines never are, because the chain is the user's.
 """
 
 import argparse
@@ -101,10 +103,10 @@ def migrate(text):
     return "".join(lines), done
 
 
-def floorless(text):
-    """Names of the lists whose last entry is not a `claude` one."""
+def problems(text):
+    """What the file gets wrong that only the user can decide how to fix."""
     lines = text.splitlines()
-    bad = []
+    found = []
     for name in ("Critics", "Security reviewers"):
         heading = find(lines, f"**{name}:**")
         if heading is None:
@@ -112,16 +114,26 @@ def floorless(text):
         items = lines[heading + 1:list_end(lines, heading)]
         last = LIST_ITEM.match(items[-1]).group(1) if items else ""
         if last.split(",", 1)[0].strip() != "claude":
-            bad.append(name)
-    return bad
+            found.append(f"the {name} list's last entry is not claude, so it has no floor")
+    if find(lines, "**Critic:**") is not None and find(lines, "**Critics:**") is None:
+        found.append("an old-shape **Critic:** line has no **Fallback:**, so it was not converted")
+    return found
 
 
 def write_atomically(path, content):
+    if path.exists():
+        mode = path.stat().st_mode & 0o777
+    else:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
             out.write(content)
+        # mkstemp makes the file 0600, and os.replace would carry that over.
+        os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         os.unlink(tmp)
@@ -153,12 +165,16 @@ def main(argv):
     if content != before:
         print(content, end="")
         if args.write:
-            write_atomically(path, content)
+            try:
+                write_atomically(path, content)
+            except OSError as exc:
+                print(f"✘ cannot write {path}: {exc}", file=sys.stderr)
+                return 1
 
-    bad = floorless(content)
-    for name in bad:
-        print(f"✘ the {name} list's last entry is not claude, so it has no floor", file=sys.stderr)
-    return 1 if bad else 0
+    found = problems(content)
+    for problem in found:
+        print(f"✘ {problem}", file=sys.stderr)
+    return 1 if found else 0
 
 
 if __name__ == "__main__":
