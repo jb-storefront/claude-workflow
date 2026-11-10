@@ -111,19 +111,20 @@ Print one block per artifact, in the order of §3, each marked with what will ha
   write    .worktreeinclude           + .env, + .env.local
   merge    .claude/settings.json      + 2 extraKnownMarketplaces, + 2 enabledPlugins
   write    docs/specs/.gitkeep        new
-  write    docs/agents/workflow.md    new (Specs: on, has a test Seam; 3 critics: codex, google, claude)
+  write    docs/agents/workflow.md    new (Specs: on, has a test Seam; critics and security reviewers: codex, google, claude)
   copy     .claude/agents/            + pr-writer.md, + test-writer.md
   skip     .claude/agents/            code-reviewer: ucp-demo-code-reviewer.md covers the role
   append   CLAUDE.md                  + ## Slice workflow
 ```
 
 Show the **full literal content** of anything new: the settings block, the workflow file, and the
-pointer block. Show the merged result for the settings file, not the fragment, so the user can see
+pointer block. For the workflow file that is the script's draft from §3 step 5, run without
+`--write`, printed as it comes back; an existing file it would change is shown the same way. Show the merged result for the settings file, not the fragment, so the user can see
 their other keys survived.
 
 Then ask once:
 
-> Write these? (the workflow file's Critics list is an edit afterwards, not a release)
+> Write these? (the workflow file's lists are an edit afterwards, not a release)
 
 Nothing is written before that answer. `--dry-run` stops here.
 
@@ -224,8 +225,8 @@ only on this machine is not in the worktrees that `/anchor-spec` and every Slice
 and those are cut from the remote default branch.
 
 **5. Write the per-repo workflow file.** `docs/agents/workflow.md`, beside Pocock's
-`issue-tracker.md`, `triage-labels.md` and `domain.md`. Two settings, and nothing else; `CONTRACTS.md`
-describes both:
+`issue-tracker.md`, `triage-labels.md` and `domain.md`. Three settings, and nothing else;
+`CONTRACTS.md` describes all three:
 
 ```markdown
 **Specs:** on
@@ -234,45 +235,69 @@ describes both:
 1. codex, default
 2. google, gemini-3.8-flash-high
 3. claude, claude-opus-5
+
+**Security reviewers:**
+1. codex, default
+2. google, gemini-3.8-flash-high
+3. claude, claude-opus-5
 ```
 
-Nothing in it is loaded into a session's context. `/critique-spec` reads the Critics list, walking
-it in order and running the first entry that can actually produce a Critique on this machine.
-`/dispatch-slices`, `/acceptance-tests` and `/finalize-pr` read the Specs line. Changing either is
-an edit to this file and not a release of this plugin, so say so in §4.
+A script writes it, not this prose. Run it once without `--write` for the §2 draft, and again with
+`--write` after the confirmation:
+
+```bash
+python3 <this skill dir>/../../scripts/workflow-file.py docs/agents/workflow.md --specs {on|off}
+python3 <this skill dir>/../../scripts/workflow-file.py docs/agents/workflow.md --specs {on|off} --write
+```
+
+Its first line is `new`, `update` with what it changes, or `unchanged`. The rest is the file as it
+will stand. Report its word in §4. The script
+([workflow-file.py](../../scripts/workflow-file.py)) exists because the rules below are about
+leaving bytes alone, and code keeps that promise better than prose does.
+
+Nothing in the file is loaded into a session's context. `/critique-spec` reads the Critics list,
+walking it in order and running the first entry that can actually produce a Critique on this
+machine. `/review-pr` walks the Security reviewers list the same way for its security review.
+`/dispatch-slices`, `/acceptance-tests` and `/finalize-pr` read the Specs line. Changing any of them
+is an edit to this file and not a release of this plugin, so say so in §4.
 
 **The Specs value is the one §1 chose**: `on` when the repo has a test Seam, `off` when it has none.
 Absent means `on`, so the line is written even when it says `on`: it is where the next reader learns
 the setting exists. `off` turns every Spec gate off for the repo and makes every Slice a lone
 Slice; it does not skip the tests, because `/finalize-pr` holds a lone Slice to its own Criteria.
-Name the value and the reason in §2 and §4.
+Name the value and the reason in §2 and §4. `--specs` only matters for a new file.
 
-**Write all three entries even when the CLIs are missing.** An entry costs nothing when its vendor
-is absent — `/critique-spec` skips it and moves on — and a user who installs Codex or Antigravity
-next month gets a working chain without editing anything. Writing only the Claude entry would make
-installing a CLI a silent no-op.
+**Both lists get all three entries, in the same default order, even when the CLIs are missing.** An
+entry costs nothing when its vendor is absent, because the skill walking the list skips it and moves
+on. A user who installs Codex or Antigravity next month then gets a working chain without editing
+anything. Writing only the Claude entry would make installing a CLI a silent no-op. They are two
+lists so that spec critique and security review can be reordered independently.
 
-**The last entry must name `claude`**, because it is the only vendor that runs with nothing
-installed. `/critique-spec` stops on a list whose last entry is any other vendor, so never write one
-and never reorder a user's list in a way that moves their Claude entry off the end.
+**The last entry of each list must name `claude`**, because it is the only vendor that runs with
+nothing installed. `/critique-spec` stops on a list whose last entry is any other vendor, so never
+write one and never reorder a user's list in a way that moves their Claude entry off the end.
 
 **`default` in the model position means let that vendor's wrapper choose.** It is written on the
 `codex` entry because the Codex plugin's own runtime says to leave `--model` unset unless the user
 asks for a specific one; `codex-rescue` passes a concrete name straight through to `--model`, and
 maps the word `spark` to `gpt-5.3-codex-spark`. The `google` entry names a model instead, because
-`agy-rescue` omits `--model` unless the caller supplies one, and `/critique-spec` checks the id
-against `agy models` before it dispatches. Any id from that list works; `gemini-3.8-flash-high` is
-the default here because a Critique is a read-and-report job.
+`agy-rescue` omits `--model` unless the caller supplies one, and the id is checked against
+`agy models` before dispatch. Any id from that list works; `gemini-3.8-flash-high` is the default
+here because a Critique is a read-and-report job.
 
-If the file already exists, leave it **completely alone**, whatever vendors and models it names, as
-long as its last entry is a `claude` one. The user's choice of critics is the whole reason this file
-exists. That includes a file with no `**Specs:**` line: absent means `on`, and adding the line to
-someone's file is an edit they did not ask for.
+**An existing file is left alone, with two exceptions.** The user's choice of critics is the whole
+reason this file exists, so the script never touches the Specs line, the Critics list, an existing
+Security reviewers list, or a line it does not recognise. That includes a file with no `**Specs:**`
+line: absent means `on`, and adding the line to someone's file is an edit they did not ask for. The
+two exceptions, both shown in the §2 draft before anything is written:
 
-A file in the superseded two-line shape, `**Critic:**` and `**Fallback:**`, is the one exception.
-Offer to rewrite it as the list its two lines already encode, keeping both vendors and both models
-in that order, and show the result in §2 like any other write. Never add, drop, or reorder an entry
-while doing it: this converts a shape, it does not choose a critic.
+- **No `**Security reviewers:**` list.** The script adds the default list directly after the
+  Critics list. It does not copy the repo's Critics order: the lists are separate on purpose, and
+  the default is the documented starting point.
+- **The superseded two-line shape, `**Critic:**` and `**Fallback:**`.** The script rewrites it as
+  the Critics list its two lines already encode, keeping both vendors and both models in that order.
+  It never adds, drops, or reorders an entry while doing it: this converts a shape, it does not
+  choose a critic.
 
 **6. Copy the agent templates.** From this skill's `templates/agents/` into the repo's
 `.claude/agents/`:
@@ -328,7 +353,7 @@ Repo:      {owner}/{repo} on {default branch}
   {written | unchanged | not needed}  .worktreeinclude    {paths, or "no gitignored .env files"}
   {merged | unchanged}   .claude/settings.json   marketplace + 2 plugins
   {created | unchanged}  docs/specs/
-  {written | unchanged}  docs/agents/workflow.md Specs: {on | off} ({has | no} test Seam); critics: codex → google → claude
+  {written | updated | unchanged}  docs/agents/workflow.md Specs: {on | off} ({has | no} test Seam); critics and security reviewers: codex → google → claude
   {copied | unchanged}   .claude/agents/         {files, or which existing agent covers each role}
   {appended | unchanged} {CLAUDE.md}             ## Slice workflow
 
@@ -359,7 +384,7 @@ Pocock's skills: setup has not run in this repo
 **Codex**, when the CLI or the plugin is missing:
 
 ```
-Codex critic: unavailable, so /critique-spec skips entry 1 of the Critics list
+Codex: unavailable, so /critique-spec and /review-pr skip entry 1 of their lists
 
   codex plugin  {installed | not found}   /plugin marketplace add openai/codex-plugin-cc
                                           /plugin install codex@openai-codex
@@ -377,7 +402,7 @@ Codex critic: unavailable, so /critique-spec skips entry 1 of the Critics list
 **Antigravity**, when the CLI or the plugin is missing, in the same shape and for the same reason:
 
 ```
-Google critic: unavailable, so /critique-spec skips entry 2 of the Critics list
+Google: unavailable, so /critique-spec and /review-pr skip entry 2 of their lists
 
   antigravity plugin  {installed | not found}   /plugin marketplace add MarcosNahuel/antigravity-plugin-cc
                                                 /plugin install antigravity@marcosnahuel-antigravity
@@ -403,7 +428,7 @@ configured is not the one doubting their Spec. Say so once: an installed CLI is 
 present, and only a real Critique proves it is signed in.
 
 Close with: re-running `/setup-workflow` is safe and reports `unchanged` for everything already
-done. Changing the critics, their order, or the Specs value is an edit to `docs/agents/workflow.md`.
+done. Changing the critics, the security reviewers, their order, or the Specs value is an edit to `docs/agents/workflow.md`.
 
 ## Rules
 

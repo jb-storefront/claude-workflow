@@ -15,7 +15,21 @@ import tempfile
 from pathlib import Path
 
 WRITER = Path(__file__).with_name("workflow-file.py")
-THIS_REPO = Path(__file__).resolve().parent.parent / "docs" / "agents" / "workflow.md"
+# This repo's docs/agents/workflow.md as it stood before the Security reviewers
+# list existed. Frozen here so the cases keep their precondition once the real file
+# is migrated.
+THIS_REPO = (
+    '# Workflow\n'
+    '\n'
+    "Per-repo settings for the slice workflow. `CONTRACTS.md` describes this file's shape.\n"
+    '\n'
+    '**Specs:** off\n'
+    '\n'
+    '**Critics:**\n'
+    '1. codex, default\n'
+    '2. google, gemini-3.8-flash-high\n'
+    '3. claude, claude-opus-5\n'
+)
 
 
 def run(path, *args):
@@ -87,7 +101,7 @@ def c1_new_file_mirrors_critics(root):
 
 def migrated_copy_of_this_repo(root):
     f = root / "workflow.md"
-    shutil.copyfile(THIS_REPO, f)
+    f.write_text(THIS_REPO)
     return f
 
 
@@ -159,7 +173,44 @@ def c4_existing_list_left_alone(root):
     return True, ""
 
 
+def old_shape_becomes_the_list_it_encodes(root):
+    f = root / "workflow.md"
+    f.write_text(
+        "**Specs:** off\n"
+        "\n"
+        "**Critic:** google, gemini-3.8-pro\n"
+        "\n"
+        "**Fallback:** claude, claude-opus-5\n"
+    )
+    proc = run(f, "--write")
+    if proc.returncode != 0:
+        return False, f"exit {proc.returncode}: {proc.stderr.strip()}"
+    after = f.read_text()
+    want = [("google", "gemini-3.8-pro"), ("claude", "claude-opus-5")]
+    if entries(after, "Critics") != want:
+        return False, f"Critics became {entries(after, 'Critics')}, expected {want}"
+    if "**Critic:**" in after or "**Fallback:**" in after:
+        return False, "old-shape lines survived the conversion"
+    if specs_line(after) != "**Specs:** off":
+        return False, f"Specs line became {specs_line(after)!r}"
+    if not entries(after, "Security reviewers"):
+        return False, "no Security reviewers list added"
+    return True, ""
+
+
+def unknown_lines_survive(root):
+    f = migrated_copy_of_this_repo(root)
+    f.write_text(f.read_text() + "\nA note someone left here.\n")
+    run(f, "--write")
+    if "\nA note someone left here.\n" not in f.read_text():
+        return False, "a line the writer does not own was dropped"
+    return True, ""
+
+
 CASES = [
+    ("an old Critic/Fallback file becomes the Critics list it encodes",
+     old_shape_becomes_the_list_it_encodes),
+    ("lines the writer does not own survive", unknown_lines_survive),
     ("#53 C1 a new file's Security reviewers list mirrors Critics and ends in claude",
      c1_new_file_mirrors_critics),
     ("#53 C2 an existing file gains the list, shown in the draft, Specs and Critics byte-identical",

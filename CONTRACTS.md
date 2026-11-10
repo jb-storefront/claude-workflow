@@ -532,13 +532,18 @@ the formula and its own issue number, which is the same answer.
 docs/agents/workflow.md
 ```
 
-Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. Two settings, each one line or one
-list, and nothing else:
+Beside `issue-tracker.md`, `triage-labels.md` and `domain.md`. Three settings, one line and two
+lists, and nothing else:
 
 ```markdown
 **Specs:** on
 
 **Critics:**
+1. codex, default
+2. google, gemini-3.8-flash-high
+3. claude, claude-opus-5
+
+**Security reviewers:**
 1. codex, default
 2. google, gemini-3.8-flash-high
 3. claude, claude-opus-5
@@ -594,9 +599,31 @@ The vendors `/critique-spec` knows how to dispatch, and what each needs before i
 Adding a vendor the table does not list is not a matter of editing this file: `/critique-spec` stops
 on a vendor it has no dispatch path for rather than guessing one.
 
+### The Security reviewers list
+
+The chain `/review-pr` walks for a PR's security review, and read by nothing else. It has the
+Critics list's shape and its rules, and is a separate list so that spec critique and security
+review can put vendors in different orders.
+
+- **Each entry is `{vendor}, {model}`**, and `default` in the model position means the same as it
+  does for Critics.
+- **The vendors are `codex`, `google` and `claude`**, dispatched through the subagents and checked
+  against the requirements in the Critics table above. Any other vendor stops the run.
+- **The last entry is the floor and must name `claude`.** For a security review, that entry is
+  Claude Code's built-in security review. A list ending in any other vendor has no floor, and
+  `/review-pr` stops rather than discovering it halfway down the chain.
+- **The order is the repo's choice.** `/setup-workflow` writes the same default order as Critics,
+  for a new file and when it adds the list to an existing file that lacks it. It never reorders a
+  list that is already there, and never copies the repo's Critics order into it.
+
+**A missing list means the Claude floor runs.** `/review-pr` does not borrow the Critics list in its
+place: it runs Claude's built-in security review, and says once that `/setup-workflow` adds the
+list.
+
 Written by `/setup-workflow`. The Critics list is read by `/critique-spec` and by nothing else; the
-Specs line is read by `/dispatch-slices`, `/acceptance-tests` and `/finalize-pr`. Changing either
-is an edit to this file and not a release of the plugin. There is no mode line here: a repository
+Security reviewers list by `/review-pr` and by nothing else; the Specs line by `/dispatch-slices`,
+`/acceptance-tests` and `/finalize-pr`. Changing any of them is an edit to this file and not a
+release of the plugin. There is no mode line here: a repository
 that keeps Specs cannot choose which of its gates block.
 
 Nothing in this file is loaded into a session's context. Each line is read on demand by the skills
