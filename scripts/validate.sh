@@ -18,6 +18,9 @@ echo "== skills"
 if ! python3 scripts/test-check-skill-frontmatter.py; then fail=1; fi
 if ! python3 scripts/check-skill-frontmatter.py skills; then fail=1; fi
 
+echo "== scripts"
+if ! python3 scripts/test-prune-plugin-entries.py; then fail=1; fi
+
 # Neither manifest can see the other, so strict validation passes on a version
 # disagreement that makes the marketplace advertise a release nobody shipped.
 echo "== versions"

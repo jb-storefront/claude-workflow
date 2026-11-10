@@ -105,6 +105,17 @@ holds its lock for a running session. So the order is fixed — stop, remove, de
   If the worktree exists but no session owns it any more, `git worktree remove {wt}` does the same
   job. If git says it is locked, the session that held it was killed; Claude Code's periodic sweep
   releases such locks, and `git worktree unlock {wt}` forces it now.
+- **Prune the worktree's plugin records**, only once `{wt}` is gone from disk:
+
+  ```bash
+  python3 <this skill dir>/../../scripts/prune-plugin-entries.py {wt}
+  ```
+
+  Every session started in a worktree records a plugin install keyed by its path, and removing the
+  worktree leaves those records behind, so without this `claude plugin list` grows by a few lines
+  per Slice forever. The script ([prune-plugin-entries.py](../../scripts/prune-plugin-entries.py))
+  refuses a path still on disk, so a kept worktree keeps its records. Skip this step when there was
+  no worktree.
 - **Sync the local view**: `git fetch origin {default_branch} --prune`; if currently on
   `{default_branch}`, also `git pull origin {default_branch}`.
 - **Delete the local branch** if it exists (`git branch --list {head_ref}`) and is not checked out:

@@ -199,6 +199,12 @@ For each PR in the order:
      - no session id for the worktree (a session already reaped) → `git worktree remove {wt}`, and
        `git worktree remove --force {wt}` only when `status --porcelain` in it is empty and git is
        refusing for some other reason.
+     - once `{wt}` is gone from disk, prune the plugin records sessions left keyed by its path:
+       `python3 <this skill dir>/../../scripts/prune-plugin-entries.py {wt}`. Removing a worktree
+       does not remove them, and nothing else does
+       ([prune-plugin-entries.py](../../scripts/prune-plugin-entries.py) says why). It refuses a
+       path still on disk, so a worktree §4.5 had to keep keeps its records. A failure here is a
+       warning, never a pause: the merge does not depend on it.
    - `git switch {default}` — never merge a branch that is currently checked out here.
    - `gh pr merge {pr} --squash --delete-branch`
    - Verify: `gh pr view {pr} --json state --jq '.state'` == `MERGED`.
@@ -226,7 +232,8 @@ For each PR in the order:
 
 - `git switch {return_branch}`; if that was a merged slice branch, `git switch {default}` instead.
 - `git fetch origin --prune` — drops the remote-tracking refs for branches deleted in §4.5.
-- Any worktree left for a merged branch: remove it as §4.5 does. Then delete the local branch —
+- Any worktree left for a merged branch: remove it as §4.5 does, pruning its plugin records the
+  same way. Then delete the local branch —
   `git branch -D {headRef}` if it still exists. `-D` is required, not a fallback: a squash merge
   rewrites the commits, so `-d` always refuses. A `-D` that fails with *"used by worktree at"* means
   a worktree survived; go back and remove it rather than forcing anything.
