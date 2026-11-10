@@ -127,19 +127,22 @@ def check_54_c3(pr, finding):
 
 def check_54_c4(pr, _):
     """#54 C4 a ready PR with a new commit: /review-pr on its own reviews again and posts a new summary."""
-    if pr.draft:
-        return False, "the PR is a draft"
     heads = [field(c["body"], "Head") for c in pr.summaries]
+    outcomes = [REVIEW_HEAD.match(first_line(c["body"])).group(1) for c in pr.summaries]
     if len(heads) < 2:
         return False, f"{len(heads)} /review-pr summaries, expected at least two"
     if not heads[-1] or not pr.head.startswith(heads[-1]):
         return False, f"latest summary reviewed {heads[-1]}, head is {pr.head}"
-    if not any(h and not pr.head.startswith(h) for h in heads[:-1]):
-        return False, "no earlier summary reviewed a different commit"
+    # The Given: an earlier run marked the PR ready on a commit that is no longer the head.
+    if not any(o == "Ready" and h and not pr.head.startswith(h) for h, o in zip(heads, outcomes)):
+        return False, "no earlier summary marked the PR ready on a different commit"
     on_head = [r for r in pr.finalize_reviews if r.get("commit_id") == pr.head]
     if on_head:
         return False, "/finalize-pr also ran on the new head, so /review-pr did not run on its own"
-    return True, f"{len(heads)} summaries, latest on {pr.head[:7]}"
+    # Whatever the new review decided, the PR's state must agree with it.
+    if pr.draft != (outcomes[-1] == "Draft"):
+        return False, f"latest summary says {outcomes[-1]} but the PR's draft is {pr.draft}"
+    return True, f"{len(heads)} summaries, latest {outcomes[-1]} on {pr.head[:7]}"
 
 
 def check_54_c5(pr, spec):
