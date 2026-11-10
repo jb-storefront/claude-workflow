@@ -148,7 +148,7 @@ it over-selects by design. Medium and Low findings are listed, not blocking.
 
 ## 5. Post the summary
 
-One comment, via `gh pr comment {pr_number} --body @-` from a heredoc. Its shape is in
+One comment, via `gh pr comment {pr_number} --body-file -` from a heredoc. Its shape is in
 `CONTRACTS.md`, under **The `/review-pr` summary comment**, because other skills and the tests read
 it:
 
@@ -178,6 +178,10 @@ Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved
 
 Every Critical and High finding goes under `### Blocking findings` with its `path:line`, so the
 person picking up a Draft PR does not have to open the full report to learn what stopped it.
+
+Read it back: `gh pr view {pr_number} --json comments --jq '.comments[-1].body'` must open with
+`## /review-pr`. `gh pr comment --body @-` posts the two characters `@-` and returns success, which
+is how a summary disappears without an error.
 
 Post a new comment on every run; never edit an earlier one. Each summary records the head it
 reviewed, and the history of which commit passed and which did not is the point.
@@ -221,7 +225,7 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
   earlier summary passed.
-- A GitHub write that returns success is not evidence it took effect. §6 says what to read back.
+- A GitHub write that returns success is not evidence it took effect. §5 and §6 say what to read back.
 - Read the Slice from the repository `closingIssuesReferences` names, with `--repo`.
 - Do not modify source files. Fixing what the review found is the session's next step, not this
   skill's.

@@ -246,7 +246,7 @@ markdown image per captured Frame: the Criterion's id as the alt text, and the U
 decides faster than one who reads a description of it, and the images belong in the body rather than
 only in the review comment because the body is what survives on the merged pull request.
 
-If there is none: generate a minimal PR body inline, the Criteria list (verbatim from the Slice) plus `Closes #{issue_number}`, and the same `## Screens` section, and update via `gh pr edit {pr_number} --body @-` from a heredoc.
+If there is none: generate a minimal PR body inline, the Criteria list (verbatim from the Slice) plus `Closes #{issue_number}`, and the same `## Screens` section, and update via `gh pr edit {pr_number} --body-file -` from a heredoc.
 
 ## 10. Classify every Criterion, and the AI-discipline pass
 
@@ -375,7 +375,7 @@ Tick **only** the `verified` ones. `weak` is what a tick used to mean, and endin
 why these four states exist; `manual` is the human's to tick once they have run the check.
 
 For each verified Criterion, edit the issue body via `gh issue edit {issue_number} --repo
-{owner}/{repo} --body @-` to flip the corresponding `- [ ]` → `- [x]`. Replace by exact line match
+{owner}/{repo} --body-file -` to flip the corresponding `- [ ]` → `- [x]`. Replace by exact line match
 (don't restructure the body). Then leave a comment: `gh issue comment {issue_number} --repo
 {owner}/{repo} --body "PR #{pr_number} verified: …"` listing each ticked Criterion by id and the
 test that carries it.
@@ -390,7 +390,7 @@ If nothing is verified, skip the edit and the comment.
 Compose a single review body and post it as a tracked review (never `--approve`):
 
 ```
-gh pr review {pr_number} --comment --body @-
+gh pr review {pr_number} --comment --body-file -
 ```
 
 Body structure:

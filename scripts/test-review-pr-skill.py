@@ -41,6 +41,19 @@ def test_54_c7_review_pr_skill_passes_the_frontmatter_check():
     return not problems, "; ".join(problems)
 
 
+def test_no_skill_posts_a_body_of_at_dash():
+    """gh body from stdin"""
+    # `gh pr comment --body @-` posts the two characters `@-` and returns success; only
+    # `--body-file -` reads stdin. Seen on gr4vy/gr4ce#453, where the review summary was lost.
+    hits = [
+        f"{md.relative_to(ROOT)}:{n}"
+        for md in sorted((ROOT / "skills").rglob("*.md"))
+        for n, line in enumerate(md.read_text(encoding="utf-8").splitlines(), start=1)
+        if "--body @-" in line
+    ]
+    return not hits, "; ".join(hits)
+
+
 def main():
     cases = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
