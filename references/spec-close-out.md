@@ -41,26 +41,39 @@ not a decision to leave the human there.
 
 Most merges owe nothing. Establish that first, and cheaply.
 
-For each closed Slice `{slice}`:
+For each closed Slice `{slice}`, find the Spec issue it is a sub-issue of:
 
-- `gh issue view {slice} --json body --jq '.body'`
-- Read `## Parent`. **No `## Parent`, or no issue reference in it → a lone Slice.** It has no Spec,
-  so there is nothing to close out. Skip it.
-- Otherwise the issue number in that section is `{spec}`.
+```
+gh api 'repos/{owner}/{repo}/issues/{slice}/parent' --jq .number
+```
+
+- A number → that is `{spec}`. This covers a lone Slice linked under a Spec too: it is on the
+  Spec's roster, so its merge can be the one that lands the Spec.
+- HTTP 404 (*No parent issue found*) → read the Slice's `## Parent` instead. An issue reference
+  there is `{spec}`; the roster check below stops on it, because it names a Spec it was never
+  linked to. **No `## Parent`, or no issue reference in it → a lone Slice** with no Spec, so there
+  is nothing to close out. Skip it.
 
 Dedupe the `{spec}` set — a batch often closes several Slices of one Spec — then for each `{spec}`:
 
-- `gh issue view {spec} --json body,title,state`
-- Read the `## Slices` task list for every issue reference in it. That list is the Spec's roster of
-  Slices.
-- Ask the tracker for each one's state: `gh issue view {n} --json state --jq '.state'`.
+- `gh issue view {spec} --json title,state`
+- Read the Spec's roster, which `CONTRACTS.md` makes the Spec issue's sub-issues:
 
-  **Not the checkbox.** GitHub ticks `- [x]` on its own when a referenced issue closes, but a
-  hand-written Spec issue can carry a ticked box for an issue that is open, and an unticked one for
-  an issue that is closed. The issue's own `state` is the fact; the checkbox is a rendering of it.
+  ```
+  python3 <this skill dir>/../../scripts/spec-slices.py {spec}
+  ```
+
+  ([spec-slices.py](../scripts/spec-slices.py).) Exit 1 → **pause and report** its `✘` lines as
+  they are, and leave this Spec untouched: each names a Slice that is not a sub-issue, so the
+  roster cannot say whether every Slice landed. Exit 2 → **pause and report**.
+
+  Each Slice's `state` there is the tracker's own. A `## Slices` task list's checkbox is never
+  read: a hand-written one can be ticked for an open issue.
 - **Any Slice still `OPEN` → nothing is due for this Spec.** Leave the Spec file and the Spec issue
   exactly as they are, and say so in one line: `#60 — 2 of 5 Slices still open, Spec untouched`.
-- Every Slice `CLOSED` → the close-out runs for this Spec.
+- Every Slice `CLOSED` → the close-out runs for this Spec. An empty roster is never "every Slice
+  closed": the Slice that brought you here is a sub-issue of `{spec}`, so an empty roster means the
+  tracker changed underneath you. **Pause and report.**
 
 Then read the Spec file's path from the first line of the Spec issue body, which `/anchor-spec`
 wrote as a repo-relative path in backticks:
@@ -85,8 +98,8 @@ Two edits to the Spec file, both in its header block:
   **Landed:** #61, #62, #63, 2026-09-24
   ```
 
-  The pull requests, in the order the Slices appear in the Spec issue's `## Slices` list, then the
-  date the last one merged (`date +%F`).
+  The pull requests, in the roster's order (the order GitHub lists the Spec issue's sub-issues,
+  which `spec-slices.py` keeps), then the date the last one merged (`date +%F`).
 
   Each Slice's PR comes from the tracker, so a Slice merged weeks ago in some other session is
   listed as readily as the one that just landed:
@@ -238,7 +251,9 @@ note is the entire report in that case.
 
 - Establish that something is due before touching anything. No Spec, Slices still open, or a Slice
   with no parent Spec each mean the Spec file and the Spec issue are left untouched.
-- Trust the tracker's `state` for whether a Slice is closed, never the task list's checkbox.
+- The Spec's Slices are its sub-issues, read through `spec-slices.py`. Trust the tracker's `state`
+  for whether a Slice is closed, never a task list's checkbox, and never close out on an empty
+  roster.
 - Read the Spec file's path from the Spec issue's pointer line. Never reconstruct it from the issue
   number and title.
 - Write `implemented` regardless of the Verification's result, and commit it before running the

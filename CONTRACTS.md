@@ -16,15 +16,18 @@ Vocabulary is `CONTEXT.md`'s: Spec, Spec issue, Slice, Criterion, Seam, Critique
 
 `CONTEXT.md` gives each term an _Avoid_ list. Those lists govern the words this document and the
 skills choose when naming a concept. They do not reach inside a literal string that already exists
-in the world. Three such strings appear below and are deliberate:
+in the world. Four such strings appear below and are deliberate:
 
 - **`## User Stories`** and **`## Acceptance criteria`** are section headings that Pocock's
   `/to-spec` and `/to-tickets` write. They are quoted here as the exact bytes a parser matches.
 - **review comment** is a code review on a pull request. A Critique is a second model doubting a
   Spec before any Slice is built. Different artifacts, and the _Avoid_ entry exists to stop the
   second being called the first.
-- **task list** is GitHub's own name for a `- [ ] #NN` block, and the _Avoid_ entry it brushes
-  against governs what a Slice may be called rather than what GitHub calls its own checkbox syntax.
+- **sub-issue** is GitHub's own name for an issue linked under another, and the _Avoid_ entries it
+  brushes against (parent issue, child issue) govern what a Spec issue and a Slice may be called,
+  not what GitHub calls its own link.
+- **task list** is GitHub's own name for a `- [ ] #NN` block. It appears only where a Spec issue
+  anchored before sub-issues were the roster still carries one.
 
 A term this document introduces that is not in `CONTEXT.md` and not one of the above is a bug in one
 of the two files.
@@ -140,7 +143,7 @@ code or an intention.
 
 ## The Spec issue body after anchoring
 
-`/anchor-spec` rewrites the body it found to three things and nothing else:
+`/anchor-spec` rewrites the body it found to two things and nothing else:
 
 ```markdown
 Spec: `docs/specs/60-loyalty-earn-and-burn.md` on the default branch
@@ -150,26 +153,56 @@ Spec: `docs/specs/60-loyalty-earn-and-burn.md` on the default branch
 - C1 Loyalty ledger holds one credit row per earn-eligible line
 - C2 [manual] Rewards balance renders in the cart summary
 - C3 Unregistered client_id is rejected 401 within 200 ms
-
-## Slices
-
-- [ ] #61
-- [ ] #62
-- [ ] #63
 ```
 
 The pointer is the repo-relative path, not a link: GitHub does not resolve relative links inside an
 issue body, and a hardcoded blob URL pins a branch and a host.
 
-**No prose.** The pointer, the Criteria list with ids and tags, the Slices task list. Whatever
-narrative `/to-spec` published is now in the file, and a second copy on GitHub is a second thing to
-drift.
+**No prose.** The pointer and the Criteria list with ids and tags. Whatever narrative `/to-spec`
+published is now in the file, and a second copy on GitHub is a second thing to drift.
+
+**No Slices.** The body carries no `## Slices` section. A Spec's Slices are its sub-issues, below.
 
 The Criteria list is one line per Criterion: the id, the `[manual]` tag when present, and a summary
 short enough to read in the issue. The full Given/When/Then lives in the file.
 
-The body stays a body: labels, assignment, the Slices task list, and closing references keep working
-exactly as they did before any of this.
+The body stays a body: labels, assignment, and closing references keep working exactly as they did
+before any of this.
+
+## A Spec's Slices are its sub-issues
+
+The sub-issues of the Spec issue are the only roster of a Spec's Slices: every state, open and
+closed, in the order GitHub lists them. GitHub's sub-issue view already shows each one's state,
+assignee and progress, so nothing else in the body or on disk repeats the list.
+
+`/to-tickets` links each Slice it publishes as a sub-issue of the Spec issue it was given, and
+[references/ad-hoc-slice.md](references/ad-hoc-slice.md) links an ad hoc Slice the same way when it
+belongs to an open Spec's area.
+
+Every reader takes the roster from one script and never from the body:
+
+```bash
+python3 scripts/spec-slices.py 60
+```
+
+It pages through every sub-issue, and prints each Slice's number, title, tracker state (`OPEN` or
+`CLOSED`), assignees, and `parent`: true when the Slice's `## Parent` names this Spec, so it may own
+the Spec's Criteria. A lone Slice linked under the Spec is on the roster with `parent` false. It
+holds the Spec open like any other Slice and owns none of its Criteria.
+
+**The script stops, and so does every reader, when the sub-issues are not the whole roster:**
+
+- **A `## Slices` task list entry that is not a sub-issue.** This is a Spec issue anchored before
+  sub-issues were the roster. The list is never read as a fallback: a reader that took it would
+  keep two rosters alive, and a reader that ignored it would see a Spec with no Slices, which
+  close-out would read as every Slice closed.
+- **An issue whose `## Parent` names the Spec but that is not a sub-issue.** `/to-tickets` published
+  it without linking it.
+
+The script names every such issue in one run, each with the `gh api` command that links it. Once
+they are linked, the reader runs again. A `## Slices` list whose every entry is already a sub-issue
+is not read, and the script notes once that `/anchor-spec` drops it on its next run. An empty
+`## Slices` heading, which `/anchor-spec` used to leave, is ignored.
 
 ## The Slice body
 
@@ -213,7 +246,8 @@ be relied on to carry is the one a person is asked for.
 - None (can start immediately)
 ```
 
-- **`## Parent`** holds the Spec issue reference, or is absent on a lone Slice.
+- **`## Parent`** holds the Spec issue reference, or is absent on a lone Slice. A Slice with one is
+  also a sub-issue of that Spec issue; the section is for readers, and the link is the roster.
 - **`## Seam`** names where the tests go. When it is absent, `/acceptance-tests` asks rather than
   guessing, because no test is written at an unconfirmed Seam.
 - **`## Acceptance criteria`** is the literal heading `/to-tickets` writes, and it is the Slice's
