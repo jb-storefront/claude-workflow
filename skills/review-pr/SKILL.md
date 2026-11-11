@@ -1,14 +1,15 @@
 ---
 name: review-pr
-description: Run the local code review on a pull request with a fresh-context reviewer and the spec-drift question, post one summary comment, and mark the PR ready when nothing blocks. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
+description: Run the local code review and the security review on a pull request with fresh-context reviewers and the spec-drift question, post one summary comment, and mark the PR ready when nothing blocks. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
 ---
 
 # Review PR
 
 Review a pull request and decide whether it is ready for a human. `/finalize-pr` proves the
-Criteria; this skill reviews the code, says what it found in one comment, and is the only skill in
-the workflow that marks a PR ready. Ready therefore always means a reviewer that did not write the
-code has looked at the head commit and nothing it found blocks.
+Criteria; this skill reviews the code and its security, says what it found in one comment, and is
+the only skill in the workflow that marks a PR ready. Ready therefore always means two reviewers that
+did not write the code, one for the code and one for its security, have looked at the head commit
+and nothing either found blocks.
 
 It runs two ways, and they are the same run:
 
@@ -28,27 +29,29 @@ detached agent: the session that can fix what the review finds is the one that s
 
 ```bash
 gh pr view {pr_number} --json number,title,url,isDraft,headRefName,headRefOid,baseRefName,closingIssuesReferences,body
-git fetch origin {headRefName} {default}
+git fetch origin {headRefName} {baseRefName} {default}
 ```
 
 - `{default}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`, read before the
-  fetch. Never assume `main`. The fetch keeps `origin/{default}` current, because the §3 fallback
-  takes its fixed point from it.
+  fetch. Never assume `main`. The fetch keeps `origin/{default}` current, because the §4 fallback
+  takes its fixed point from it, and `origin/{baseRefName}` current, because the security review
+  reads the PR's diff against it.
 - `{head}` = `headRefOid`. That is the commit this run reviews and the one the summary names.
 - `git branch --show-current` must be `{headRefName}`, and `git rev-parse HEAD` must equal
   `{head}`. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
   all mean a reviewer reading the working tree would read code that is not the PR. Say which
   (`git status -sb` shows ahead/behind) and what to run. Return the PR to draft first, as below.
 
-**A stop is never a pass.** Wherever this skill stops before §5 (a checkout that is not the PR's
-head, or a reviewer that returned no sentinels), it posts no summary, and if `isDraft` is false it
-returns the PR to draft with `gh pr ready {pr_number} --undo` and reads `.draft` back as `true`
-(§5 has the read-back). A PR left ready on a head nobody reviewed says the opposite of what
+**A stop is never a pass.** Wherever this skill stops before §6 (a checkout that is not the PR's
+head, an unusable Security reviewers list, a code reviewer that returned no sentinels, or a security
+chain where no entry produced a result), it posts no summary, and if `isDraft` is false it returns
+the PR to draft with `gh pr ready {pr_number} --undo` and reads `.draft` back as `true` (§6 has the
+read-back). A PR left ready on a head nobody reviewed says the opposite of what
 happened.
 
 ## 2. Read the Slice's Parent and the repository's Specs line
 
-The drift heuristic in §3 drops the Spec this Slice is building, so it needs the Slice's
+The drift heuristic in §4 drops the Spec this Slice is building, so it needs the Slice's
 `## Parent`. Read the Slice from the repository the closing reference names, never by bare number:
 
 ```bash
@@ -63,7 +66,33 @@ With no Slice at all, there is no Parent to drop; carry on.
 When `docs/agents/workflow.md` carries `**Specs:** off`, read `## Parent` as absent. `CONTRACTS.md`
 describes the line; absent means `on`.
 
-## 3. Dispatch the code reviewer, with the drift question
+## 3. Read the Security reviewers list
+
+`docs/agents/workflow.md` holds the chain the security review walks. `CONTRACTS.md` describes it;
+this skill is its only reader. Read it with the script, never by eye and never from anywhere else:
+
+```bash
+python3 <this skill dir>/../../scripts/security-reviewers.py docs/agents/workflow.md
+```
+
+It prints one `{vendor}\t{model}` per entry, in order.
+
+- **Exit 1** → **stop** before dispatching anything, the code reviewer included, and relay its `✘`
+  line: a list whose last entry is not `claude`, a vendor with no dispatch path, or an entry that is
+  not `{vendor}, {model}`. Fixing it is an edit to `docs/agents/workflow.md`, not this skill's to
+  make. A stop is never a pass (§1).
+- **No list, or no file** → it prints the Claude floor alone, `claude\tdefault`, and one `note:` line
+  saying `/setup-workflow` adds the list. Say that once, in §8. Never borrow the Critics list.
+
+([security-reviewers.py](../../scripts/security-reviewers.py) holds these rules so they are tested
+rather than re-read on every run.)
+
+## 4. Dispatch the code reviewer and the security reviewer, together
+
+Both review `{head}`, and they run at the same time: dispatch the security reviewer's first entry
+and the code reviewer in one message, as two Agent calls. With no project code-reviewer agent the
+code review is a skill, which runs inline, so launch the security entry first and then invoke the
+skill while it works. Neither waits on the other, and neither sees the other's findings.
 
 ### Pick the candidate implemented Specs
 
@@ -139,27 +168,62 @@ calls, and an ungraded finding cannot block, so without the grades the fallback 
 Its two axes are the two things the missing agent would have done: **Spec** is this drift check, and
 **Standards** is the architectural pass. It returns findings rather than sentinels, so:
 
-- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §6, each naming the Spec and the
+- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §7, each naming the Spec and the
   behaviour, the same as an agent's `spec-drift:` lines. Advisory, like any other drift finding.
-- Its **Standards**-axis Critical and High findings count the way §4 counts `changes_requested`.
-- §6's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
+- Its **Standards**-axis Critical and High findings count the way §5 counts `changes_requested`.
+- §7's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
   which one produced the findings. Its verdict is `changes_requested` when the **Standards** axis
   holds any Critical or High finding and `approved` otherwise, with those two counts beside it.
 
 This is what a repo with no reviewer agent gets instead of the note that nothing was enforced.
 
-## 4. Verdict
+### The security reviewer
 
-Blocking when the reviewer returned `changes_requested`, or the `code-review` fallback returned any
-Critical or High finding on its **Standards** axis. The fallback stands in for the missing agent,
+Walk the chain §3 printed by the rules in
+[../../references/chain-walking.md](../../references/chain-walking.md): which entries are
+available, when an entry counts as having produced a result, where the walk ends, what to do when
+every entry fails, and which entry to name. Read it before dispatching anything. The walk is
+sequential within the chain and runs alongside the code reviewer, not after it.
+
+What those rules leave to this skill:
+
+- **A result** is a report ending in the three `SECURITY_*` sentinel lines the prompt asks for,
+  zeros included. "No vulnerabilities found." with three zeros is a result. A report without the
+  sentinels is nothing, and the walk moves on.
+- **The entry that ran** is the one §7 and §8 name, as `{vendor} ({model})`.
+- **When every entry fails**, **stop**: post nothing, and return a ready PR to draft (§1). A PR with
+  no security review has not been reviewed, whatever the code reviewer said.
+
+**One prompt, for every vendor.** Read
+[../../references/security-review-prompt.md](../../references/security-review-prompt.md), take the
+text under its `## Prompt` heading, and fill in `{pr_number}`, `{base}` (`{baseRefName}`) and
+`{head}`. Change nothing else. It is Anthropic's Claude Code security review, adapted only so that it
+runs the same on any vendor, so whichever entry runs, the review asks the same questions of the same
+diff and grades on the same scale.
+
+Each vendor gets it through the subagent and model prefix `/critique-spec` §5 uses for that vendor:
+
+- **`codex`**: `codex:codex-rescue`, prefixed `Run with --model {model}` unless the model is
+  `default`.
+- **`google`**: `antigravity:agy-rescue`, prefixed `MODEL: {model}` with no `--add-dir`.
+- **`claude`**: the Agent tool with `subagent_type: "general-purpose"` (the prompt's read-only rule
+  forbids its write tools) and the entry's model passed as `/critique-spec` §5 describes. With
+  `default`, pass none: the subagent runs on this session's model, and that model is what §7 names.
+
+## 5. Verdict
+
+Blocking when the reviewer returned `changes_requested`, the `code-review` fallback returned any
+Critical or High finding on its **Standards** axis, or the security reviewer that ran counted any
+High finding. The security prompt grades High, Medium and Low; its High is the same bar as a code
+reviewer's Critical or High: directly exploitable. The fallback stands in for the missing agent,
 so it gates what that agent gated; letting it only advise would make a repo with no reviewer agent
 the one place a Critical finding lands silently. Its **Spec** axis is the drift check and never
 blocks.
 
 Never block on a spec-drift finding. It is a question for the human, and the heuristic that raised
-it over-selects by design. Medium and Low findings are listed, not blocking.
+it over-selects by design. Medium and Low findings, from either reviewer, are listed, not blocking.
 
-## 5. Mark ready, or keep it a draft
+## 6. Mark ready, or keep it a draft
 
 Set the PR's state before the summary is written, so the summary reports the state the PR is
 actually in rather than the one this run meant to leave it in.
@@ -167,7 +231,7 @@ actually in rather than the one this run meant to leave it in.
 - **Not blocking** → `gh pr ready {pr_number}` when `isDraft` is true, then **verify**:
   `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` must be `false`. If it still
   reads `true`, the outcome is `Draft` with the reason that `gh pr ready` did not take; post that
-  summary in §6, then stop and report. `/merge-pr` hard-stops on drafts, so a PR that silently
+  summary in §7, then stop and report. `/merge-pr` hard-stops on drafts, so a PR that silently
   stayed a draft is a PR nobody can land.
 - **Blocking** → the PR stays a draft. If it was already ready (a re-run after a push), return it to
   draft with `gh pr ready {pr_number} --undo` and read `.draft` back as `true`. A ready PR whose head
@@ -175,16 +239,18 @@ actually in rather than the one this run meant to leave it in.
 
 `{owner}` and `{repo}` are **literal** in `gh api` paths: `gh` fills them from the current repo.
 
-## 6. Post the summary
+## 7. Post the summary
 
 One comment, via `gh pr comment {pr_number} --body-file -` from a heredoc. Its shape is in
 `CONTRACTS.md`, under **The `/review-pr` summary comment**, because other skills and the tests read
-it. The heading's `Ready` or `Draft` and the `### Outcome` line are the state §5 read back, never
-the state it intended.
+it. The heading's `Ready` or `Draft` and the `### Outcome` line are the state §6 read back, never
+the state it intended. The `Security:` line names the entry that ran, never one that was skipped or
+returned nothing.
 
-Every Critical and High finding goes under `### Blocking findings` with its `path:line`, so the
-person picking up a Draft PR does not have to open the full report to learn what stopped it. Put
-the reviewer's whole report, sentinel lines included, in the closing `<details>` block.
+Every blocking finding, from the code reviewer and the security reviewer alike, goes under
+`### Blocking findings` with its `path:line`, so the person picking up a Draft PR does not have to
+open the full reports to learn what stopped it. Put each reviewer's whole report, sentinel lines
+included, in its own closing `<details>` block.
 
 Read it back. `gh pr comment` prints the new comment's URL, ending `#issuecomment-{id}`; then
 `gh api "repos/{owner}/{repo}/issues/comments/{id}" --jq '.body'` must open with `## /review-pr`.
@@ -194,7 +260,7 @@ success, which is how a summary disappears without an error.
 Post a new comment on every run; never edit an earlier one. Each summary records the head it
 reviewed, and the history of which commit passed and which did not is the point.
 
-## 7. Local summary
+## 8. Local summary
 
 ```
 /review-pr — {Ready | Draft}
@@ -203,6 +269,9 @@ PR:       #{pr_number} — {pr_title}
 URL:      {pr_url}
 Head:     {head}
 Reviewer: {name} — {verdict}, {C} Critical, {H} High
+Security: {vendor} ({model}) — {H} High, {M} Medium, {L} Low
+          {each entry skipped, and why: unavailable, or returned nothing}
+          {with no list: "No Security reviewers list; /setup-workflow adds it."}
 Drift:    {N} advisory finding(s) | none
 Outcome:  {marked ready | left as a draft | returned to draft}
 
@@ -215,13 +284,22 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - This is the only skill that marks a PR ready. A PR is marked ready only after a review of its
   current head that does not block.
 - Never `--approve`. This skill comments; the human pulls the merge trigger.
-- The reviewer is always a fresh-context agent or skill, never this session's own reading of the
+- The reviewers are always fresh-context agents or skills, never this session's own reading of the
   diff.
 - Absent sentinels stop the run. Nothing is posted, and a ready PR goes back to draft (§1).
+- The Security reviewers list is read from `docs/agents/workflow.md` through
+  `security-reviewers.py` and from nowhere else. A missing list runs the Claude floor; it never
+  borrows the Critics list.
+- The claude floor is required. A list that does not end in `claude` stops the run before anything
+  is dispatched.
+- The security review always runs, alongside the code review, on the same head, with the one
+  prompt in `references/security-review-prompt.md` whichever vendor runs it. A High security finding
+  blocks exactly as a code-reviewer Critical or High does.
+- The `Security:` line names the entry that ran, never one that was skipped or returned nothing.
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
   earlier summary passed.
-- A GitHub write that returns success is not evidence it took effect. §5 and §6 say what to read back, and §6 never claims a state §5 did not read back.
+- A GitHub write that returns success is not evidence it took effect. §6 and §7 say what to read back, and §7 never claims a state §6 did not read back.
 - Read the Slice from the repository `closingIssuesReferences` names, with `--repo`.
 - Do not modify source files. Fixing what the review found is the session's next step, not this
   skill's.

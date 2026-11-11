@@ -81,7 +81,7 @@ the repo is offered both plugins when they first trust the workspace:
       /tdd              →  red-green-refactor to the acceptance criteria               (Pocock)
       /frames           →  capture what a [manual] criterion says a person would see
       /finalize-pr      →  gates, Criteria, PR description; hands a passing PR on
-      /review-pr        →  code review and spec drift; the only skill that marks ready
+      /review-pr        →  code review, security review and spec drift; the only skill that marks ready
 /merge-stack         →  land the batch in dependency order, tearing down worktrees
 ```
 
@@ -91,7 +91,9 @@ single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/anchor
 
 `/critique-spec` is best with Codex or Antigravity installed, so the doubt comes from another
 vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which
-are missing and prints the commands. Without them the Claude critic still runs.
+are missing and prints the commands. Without them the Claude critic still runs. `/review-pr`'s
+security review walks its own list the same way, and every vendor gets the same prompt: Anthropic's
+Claude Code security review, adapted to run anywhere.
 
 Four more sit beside the loop rather than inside it:
 
