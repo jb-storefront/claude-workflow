@@ -118,7 +118,13 @@ run unattended.
 
 **Acceptance criteria** are one line each, with no id, and each line states a Criterion under
 `CONTRACTS.md`'s grammar: measurable, resolving to pass or fail. Observe behaviour at the Seam, not
-the wording of a message. A Criterion only a person can check carries `[manual]` at its start.
+the wording of a message. A Criterion only a person can check carries `[manual]` at its start. A
+Criterion proven by running a command rather than by a test, such as a sandbox dry run or a vendor
+check, carries `[command]` at its start and ends with `Command:` and the exact command in backticks:
+``- [ ] [command] The sandbox dry run accepts the migration. Command: `{command}` ``. The command is
+read-only and exits 0 exactly when the Criterion holds, per `CONTRACTS.md`. A check a session can run
+is never `[manual]`, even when it needs a credential; one that restates lint, typecheck, format or
+the test suite is not a Criterion at all.
 
 **References for context** starts with `CONTEXT.md`, then the ADRs and area `CLAUDE.md`, then the
 source and test files. A path in another repository is written `{owner}/{repo}:{path}`.
@@ -144,7 +150,7 @@ label by the first rule that matches:
 3. `ready-for-human`: a person has to do the work (console access, another team, a credential).
 4. `ready-for-agent`: otherwise.
 
-A `[manual]` Criterion leaves the label alone. An agent builds that Slice, and `/dispatch-slices`
+A `[manual]` or `[command]` Criterion leaves the label alone. An agent builds that Slice, and `/dispatch-slices`
 routes it to a person for the check.
 
 Label strings come from `docs/agents/triage-labels.md` when it exists. A label missing from

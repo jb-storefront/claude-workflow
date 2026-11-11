@@ -94,6 +94,14 @@ The grammar is `CONTRACTS.md`'s, and these are the parts that go wrong most:
   thing that later decides a Slice needs a person, so a Criterion whose check you cannot imagine
   automating gets tagged now. It is tagged because automating it is not worth it, not because it is
   hard to write.
+- **`[command]` immediately after the id** on a Criterion proven by running a command rather than by
+  a test: a sandbox dry run, a vendor or schema check. Close it with a `Command:` line naming the
+  exact command, runnable from the repository root, read-only, and exiting 0 exactly when the Then
+  holds. Never `[manual]` for a check a session can run, even one needing a credential some
+  sessions lack: `CONTRACTS.md` has why. Not for lint, typecheck, format or the test suite, which
+  `/finalize-pr` already runs on every pull request. Ask the founder for the command when the Spec
+  does not give it; a guessed command is a Criterion nobody can prove.
+- **At most one tag** per Criterion.
 - **Ids are `C1`, `C2`, `C3`** in order.
 
 Stories do not map one-to-one onto Criteria. Collapse two stories that describe the same observable
@@ -101,7 +109,8 @@ behaviour into one Criterion; split a story that promises two separately checkab
 write none for a story that is pure rationale with nothing to observe.
 
 **Name no file paths.** Not in a Criterion, not anywhere you write. A path is a promise about
-structure that the next refactor breaks silently. Name behaviour, and name the Seam.
+structure that the next refactor breaks silently. Name behaviour, and name the Seam. A `Command:`
+line is the one exception, as it is for the Verification: a command that rots fails loudly.
 
 ## 4. Propose the Verification
 
@@ -158,6 +167,10 @@ Then ...
 Given ...
 When ...
 Then ...
+
+### C3 [command]
+WHEN ... THE SYSTEM SHALL ...
+Command: `{the exact command}`
 
 ## Verification
 
@@ -229,12 +242,14 @@ Spec: `docs/specs/{number}-{slug}.md` on the default branch
 
 - C1 {one-line summary}
 - C2 [manual] {one-line summary}
+- C3 [command] {one-line summary}
 ```
 
 - The pointer is the **repo-relative path, not a link**. GitHub does not resolve relative links in
   an issue body, and a blob URL pins a branch and a host.
-- One line per Criterion: the id, the `[manual]` tag when it carries one, and a summary short enough
-  to read in the issue. The full Given/When/Then stays in the file.
+- One line per Criterion: the id, its `[manual]` or `[command]` tag when it carries one, and a summary
+  short enough to read in the issue. The full Given/When/Then and every `Command:` line stay in the
+  file.
 - **No `## Slices` section.** A Spec's Slices are the Spec issue's sub-issues, which `/to-tickets`
   links. A list already in the body is dropped, never carried over; step 2 has already confirmed
   every entry in it is a sub-issue.
@@ -256,7 +271,7 @@ nothing else.
 Spec:     #{number} — {title}
 File:     docs/specs/{number}-{slug}.md
 Status:   {draft | critiqued (critique skipped: {reason})}
-Criteria: {n} ({m} manual)
+Criteria: {n} ({m} manual, {k} command)
 Verify:   {Command: ... | Walkthrough, {k} steps}
 Landed:   {pushed to {default} | PR {url} — dispatch waits for this to merge}
 

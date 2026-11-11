@@ -256,6 +256,9 @@ One rule, and it is the whole rule:
 - **AFK** — every Criterion it owns is machine-checkable. The session runs to a reviewed PR alone.
 - **HITL** — at least one `[manual]`. The session stops before `/finalize-pr` and waits for a person.
 
+`[command]` is AFK. `/finalize-pr` runs its command, and one that needs a credential the session
+lacks blocks there with that reason, which is cheaper than holding the whole Slice for a person.
+
 Read the tag from the **Spec file**, for each id the Slice cites: `grep -E '^### C[0-9]+ \[manual\]'`
 on the `## Criteria` section. The Slice body repeats the tag and the Spec issue body repeats it
 again, and either copy can be stale; the file wins. A lone Slice has no file, so its own checkboxes
