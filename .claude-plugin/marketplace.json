@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Personal engineering workflow skills for Claude Code",
-    "version": "2.3.1"
+    "version": "2.4.0"
   },
   "allowCrossMarketplaceDependenciesOn": [
     "claude-plugins-official"

@@ -601,3 +601,50 @@ that keeps Specs cannot choose which of its gates block.
 
 Nothing in this file is loaded into a session's context. Each line is read on demand by the skills
 that need it.
+
+## The per-repo infrastructure file
+
+```
+docs/agents/infrastructure.md
+```
+
+Beside `workflow.md`. It tells `/create-infra-request` where an Infrastructure request goes and what
+one looks like, for the infrastructure this repository uses and does not own. Free prose under four
+headings, because what it records differs too much between organisations for a fixed grammar:
+
+```markdown
+## Where requests go
+
+Jira, project `PE` (Platform Engineering) on gr4vy.atlassian.net, issue type Task. Priority High
+when something deployed is already broken without it, Medium otherwise.
+
+## What a request looks like
+
+- PE-1682: one change, with Summary, Context, Acceptance criteria and Other information
+- PE-1740: several changes for one Spec, as numbered parts
+
+## Where the infrastructure is declared
+
+| Resource | Declared in | Live state |
+| --- | --- | --- |
+| The ledger table | `gr4vy/terraform-gcp`, `gr4vy-data-be6c/.../terragrunt.hcl` | `bq show --schema ...` |
+
+## What is dangerous here
+
+The ledger leaf sets `deletion_protection = false`, so a plan that replaces the table drops it.
+```
+
+- **Where requests go** names the tracker, the project and the issue type, and how a priority is
+  chosen. `/create-infra-request` creates nothing in a tracker this section does not name.
+- **What a request looks like** names example requests the owning team has already accepted. They
+  are the format: their sections, their titles, their length. The skill reads them rather than
+  carrying a template of its own, so a team that changes its format changes these lines, not the
+  plugin.
+- **Where the infrastructure is declared** maps each resource the repository depends on to the file
+  that declares it and the read-only command that shows its live state.
+- **What is dangerous here** is what the owning team would want a requester to know before writing
+  one: a resource without deletion protection, a policy whose absence nothing reports.
+
+Written by hand, with the user, the first time `/create-infra-request` runs in a repository without
+it. Read by `/create-infra-request` and by nothing else. **No file means no request:** the skill
+stops rather than guessing a tracker, because a request in the wrong place is one nobody plans.
