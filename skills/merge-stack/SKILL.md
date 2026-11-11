@@ -9,7 +9,7 @@ Land several finished PRs — the output of a parallel `/dispatch-slices` fan-ou
 default branch in the right order.
 
 This is the capstone of the `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/dispatch-slices`
-→ `/tdd` → `/finalize-pr` → **`/merge-stack`** pipeline: `finalize-pr` deliberately defers the
+→ `/tdd` → `/finalize-pr` → `/review-pr` → **`/merge-stack`** pipeline: `review-pr` deliberately defers the
 merge to a human, and this skill performs it for a whole batch at once.
 
 It reuses `/merge-pr`'s readiness gates (review / CI / merge-state) per PR and owns what a

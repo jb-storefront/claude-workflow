@@ -80,7 +80,8 @@ the repo is offered both plugins when they first trust the workspace:
       /acceptance-tests →  one failing test per Criterion, at the Slice's Seam
       /tdd              →  red-green-refactor to the acceptance criteria               (Pocock)
       /frames           →  capture what a [manual] criterion says a person would see
-      /finalize-pr      →  gates, PR description, code review, ready-for-human
+      /finalize-pr      →  gates, Criteria, PR description; hands a passing PR on
+      /review-pr        →  code review and spec drift; the only skill that marks ready
 /merge-stack         →  land the batch in dependency order, tearing down worktrees
 ```
 
@@ -185,11 +186,11 @@ has nobody to answer a permission prompt, so it stalls as `Needs input` and wait
 overnight fan-out can idle on a single `git push`. Sessions a human is watching read the repo's
 committed `permissions.allow`, which is narrow and reviewable, and they keep it.
 
-**Agents stay with their project.** `/finalize-pr` dispatches a PR-writer and a code-reviewer
-found in the project's own `.claude/agents/`, matched by role rather than filename, because a
+**Agents stay with their project.** `/finalize-pr` dispatches a PR-writer and `/review-pr` a
+code-reviewer, both found in the project's own `.claude/agents/`, matched by role rather than filename, because a
 useful reviewer knows the domain (`ucp-demo-code-reviewer`, `gr4ce-code-reviewer`). This plugin ships
-no agents; with none in the project, `/finalize-pr` writes the PR body inline and runs Pocock's
-`code-review` skill in place of the reviewer.
+no agents; with none in the project, `/finalize-pr` writes the PR body inline and `/review-pr`
+runs Pocock's `code-review` skill in place of the reviewer.
 
 **A GitHub write that returns 2xx is not a GitHub write that happened.** Adding an assignee over
 REST silently ignores users without push access, so `/start-issue` claims its issue and then reads
@@ -197,8 +198,8 @@ the assignment back before creating a branch. That ordering matters more than th
 claim is what stops `/dispatch-slices` handing the same slice to a second session, and it is worth
 nothing if it lands after the branch and PR it was meant to protect.
 
-**The human still pulls the merge trigger.** `/finalize-pr` posts `--comment` reviews and never
-`--approve`, so an empty `reviewDecision` is the normal state across a batch — `/merge-pr` and
+**The human still pulls the merge trigger.** `/finalize-pr` and `/review-pr` only ever comment,
+never `--approve`, so an empty `reviewDecision` is the normal state across a batch — `/merge-pr` and
 `/merge-stack` both treat it as such rather than as a missing gate.
 
 **Nothing discards work to tidy up.** `claude rm` keeps a worktree that holds uncommitted changes

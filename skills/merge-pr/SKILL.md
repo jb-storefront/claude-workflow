@@ -20,7 +20,7 @@ Squash-merge an approved PR, then clean up what built it. For a *set* of finishe
 - Find the PR:
   - With arg: `gh pr view {number} --json number,title,url,state,isDraft,headRefName,reviewDecision,statusCheckRollup,closingIssuesReferences`
   - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, stop.
-- Validate state: `MERGED` → stop (no-op); `CLOSED` → stop; `isDraft=true` → **stop** ("Mark it ready with `gh pr ready {number}` first.").
+- Validate state: `MERGED` → stop (no-op); `CLOSED` → stop; `isDraft=true` → **stop** ("Run `/review-pr {number}`; it marks the PR ready when its review does not block.").
 - **Locate the branch's worktree.** `git worktree list --porcelain` → `{wt}` for `{headRefName}`,
   and `claude agents --json` → the session `id` and `state` whose `cwd` is `{wt}`. A slice built by
   `/dispatch-slices` has both; a PR written by hand has neither. §5 needs them, and it is worth

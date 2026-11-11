@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Reviews a Slice's pull request against this project's architecture, its ADRs and its Specs, and returns findings ranked by severity. Dispatched by /finalize-pr, which finds it by this role rather than by filename, and which blocks on Critical and High findings.
+description: Reviews a Slice's pull request against this project's architecture, its ADRs and its Specs, and returns findings ranked by severity. Dispatched by /review-pr, which finds it by this role rather than by filename, and which blocks on Critical and High findings.
 ---
 
 # Code Reviewer
@@ -70,5 +70,5 @@ CRITICAL_COUNT: <n>
 HIGH_COUNT: <n>
 ```
 
-`VERDICT` is `approved` only when both counts are zero. `/finalize-pr` parses these three lines and
+`VERDICT` is `approved` only when both counts are zero. `/review-pr` parses these three lines and
 stops outright if they are missing, so emit them even when you found nothing.

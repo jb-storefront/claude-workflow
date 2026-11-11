@@ -16,6 +16,7 @@ if ! claude plugin validate .claude-plugin/marketplace.json --strict; then fail=
 # Neither of the two commands above opens a SKILL.md; see the checker's docstring.
 echo "== skills"
 if ! python3 scripts/test-check-skill-frontmatter.py; then fail=1; fi
+if ! python3 scripts/test-review-pr-skill.py; then fail=1; fi
 if ! python3 scripts/check-skill-frontmatter.py skills; then fail=1; fi
 
 echo "== scripts"
@@ -45,7 +46,7 @@ frontmatter() { awk 'NR==1 && $0!="---" {exit} NR>1 && $0=="---" {exit} NR>1' "$
 # nothing to check.
 shopt -s nullglob
 
-# /finalize-pr finds agents by the role in their frontmatter, not by filename,
+# /finalize-pr and /review-pr find agents by the role in their frontmatter, not by filename,
 # and the adopter is asked to teach each one the domain in exactly one place.
 # Both are properties of the shipped file, so both are checkable here.
 echo "== agent templates"
