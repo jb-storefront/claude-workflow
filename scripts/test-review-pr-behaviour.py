@@ -9,6 +9,8 @@ CI. validate.sh does not call it, because it needs a PR to look at.
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C1 448
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C3 449 --finding src/x.py
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C5 451 --finding docs/specs/9-x.md
+    test-review-pr-behaviour.py --repo owner/repo S1 70 --finding "claude (opus)"
+    test-review-pr-behaviour.py --repo owner/repo S2 70 --finding scripts/planted.py
 
 The comment shapes it reads are defined in CONTRACTS.md, under the /review-pr
 summary comment.
@@ -167,7 +169,58 @@ def check_54_c5(pr, spec):
     return True, f"drift names {spec}"
 
 
+def counts(line):
+    """{severity: n} from a `Security:` line's `{C} Critical, {H} High, ...` tail."""
+    return {sev: int(n) for n, sev in re.findall(r"(\d+) (Critical|High|Medium|Low)", line or "")}
+
+
+def security_line(body):
+    m = re.search(r"^Security:\s*(.*)$", body, re.M)
+    return m.group(1) if m else None
+
+
+def check_security_entry(pr, entry):
+    """S1 the security entry that ran is the one named: pass --finding with the expected `{vendor} ({model})`."""
+    if not pr.summaries:
+        return False, "no /review-pr summary on the PR"
+    if not entry:
+        return False, "pass --finding with the entry the Security line should name"
+    summary = pr.summaries[-1]["body"]
+    reviewed = field(summary, "Head")
+    if not reviewed or not pr.head.startswith(reviewed):
+        return False, f"the latest /review-pr summary reviewed {reviewed}, head is {pr.head}"
+    named = field(summary, "Security")
+    if named != entry:
+        return False, f"the Security line names {named!r}, expected {entry!r}"
+    return True, f"Security names {named}"
+
+
+def check_security_blocks(pr, finding):
+    """S2 a planted vulnerability the security reviewer grades Critical or High: PR stays a draft, finding listed as blocking."""
+    if not pr.summaries:
+        return False, "no /review-pr summary on the PR"
+    summary = pr.summaries[-1]["body"]
+    reviewed = field(summary, "Head")
+    if not reviewed or not pr.head.startswith(reviewed):
+        return False, f"the latest /review-pr summary reviewed {reviewed}, head is {pr.head}"
+    graded = counts(security_line(summary))
+    if graded.get("Critical", 0) + graded.get("High", 0) == 0:
+        return False, f"the Security line counts no Critical or High finding: {security_line(summary)!r}"
+    if REVIEW_HEAD.match(first_line(summary)).group(1) != "Draft":
+        return False, "the latest /review-pr summary does not report Draft"
+    blocking = section(summary, "Blocking findings") or ""
+    security = [l for l in blocking.splitlines() if l.lstrip("- ").startswith("Security")]
+    if not security:
+        return False, "no security finding under Blocking findings"
+    if finding and not any(finding in l for l in security):
+        return False, f"no blocking security finding names {finding}"
+    if not pr.draft:
+        return False, "the PR was marked ready"
+    return True, "PR is a draft, blocking security finding named"
+
+
 CHECKS = {f"C{n}": globals()[f"check_54_c{n}"] for n in range(1, 6)}
+CHECKS.update(S1=check_security_entry, S2=check_security_blocks)
 
 
 def main():
@@ -175,7 +228,7 @@ def main():
     p.add_argument("--repo", required=True)
     p.add_argument("criterion", choices=sorted(CHECKS))
     p.add_argument("pr", type=int)
-    p.add_argument("--finding", help="the path the blocking finding or the drift must name")
+    p.add_argument("--finding", help="the path the blocking finding or the drift must name, or the S1 entry")
     a = p.parse_args()
     check = CHECKS[a.criterion]
     ok, why = check(PR(a.repo, a.pr), a.finding)
