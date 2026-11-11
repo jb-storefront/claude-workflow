@@ -44,8 +44,9 @@ the runner reports docstrings.
 **Map the clauses straight across.** Given is arrange, When is act, Then is assert. A Then that
 names a number asserts that number.
 
-**Skip the `[manual]` Criteria.** They are tagged because a person checks them. Writing an
-automated test for one is how a tag stops meaning anything. List them for the human instead.
+**Skip the `[manual]` and `[command]` Criteria.** A person checks the first, and `/finalize-pr` runs
+the second's command. Writing an automated test for either is how a tag stops meaning anything. List
+them instead.
 
 **Rename rather than duplicate.** When a test already covers the behaviour, add the id to that
 test's name. `/finalize-pr` accepts the rename as evidence, and a second test for one behaviour is

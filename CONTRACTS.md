@@ -79,6 +79,10 @@ Then the balance renders in the cart summary as "240 points"
 ### C3
 WHEN a request arrives with an unregistered client_id THE SYSTEM SHALL respond 401 within 200 ms
 
+### C4 [command]
+WHEN the ledger migration is submitted to the sandbox warehouse as a dry run THE SYSTEM SHALL accept it
+Command: `uv run python scripts/dry_run.py --target sandbox migrations/ledger.sql`
+
 ## Verification
 
 Command: `pnpm test:e2e loyalty`
@@ -120,7 +124,11 @@ each exactly one line:
 
 Not in the Criteria, not in the Decisions, not anywhere. A path in a Spec is a promise about
 structure that the next refactor breaks silently, and it is exactly what makes a Spec rot. Name
-behaviour and name Seams. `/review-pr` finds the Specs a diff touches by matching Spec slugs and
+behaviour and name Seams.
+
+The one exception is a runnable command: the Verification's `Command:` line, and the `Command:` line
+of a `[command]` Criterion. A path inside a command does not rot silently. The first run after the
+refactor fails, and says which path. `/review-pr` finds the Specs a diff touches by matching Spec slugs and
 `CONTEXT.md` terms against changed paths, which is why it needs no paths written down.
 
 ## Status, and who writes each value
@@ -153,6 +161,7 @@ Spec: `docs/specs/60-loyalty-earn-and-burn.md` on the default branch
 - C1 Loyalty ledger holds one credit row per earn-eligible line
 - C2 [manual] Rewards balance renders in the cart summary
 - C3 Unregistered client_id is rejected 401 within 200 ms
+- C4 [command] Sandbox dry run accepts the ledger migration
 ```
 
 The pointer is the repo-relative path, not a link: GitHub does not resolve relative links inside an
@@ -163,8 +172,9 @@ published is now in the file, and a second copy on GitHub is a second thing to d
 
 **No Slices.** The body carries no `## Slices` section. A Spec's Slices are its sub-issues, below.
 
-The Criteria list is one line per Criterion: the id, the `[manual]` tag when present, and a summary
-short enough to read in the issue. The full Given/When/Then lives in the file.
+The Criteria list is one line per Criterion: the id, its `[manual]` or `[command]` tag when present,
+and a summary short enough to read in the issue. The full Given/When/Then, and a `[command]`
+Criterion's command, live in the file.
 
 The body stays a body: labels, assignment, and closing references keep working exactly as they did
 before any of this.
@@ -235,6 +245,7 @@ be relied on to carry is the one a person is asked for.
 
 - [ ] #60 C1 Loyalty ledger holds one credit row per earn-eligible line
 - [ ] #60 C3 Unregistered client_id is rejected 401 within 200 ms
+- [ ] #60 C4 [command] Sandbox dry run accepts the ledger migration
 
 ## References for context
 
@@ -268,7 +279,11 @@ same gate:
 ## Acceptance criteria
 
 - [ ] #74 C1 A malformed webhook payload is rejected 400 with the offending field named
+- [ ] #74 C2 [command] The webhook schema passes the vendor check. Command: `pnpm vendor:check webhooks`
 ```
+
+A lone Slice has no Spec file to hold a `[command]` Criterion's command, so the checkbox carries it,
+after the summary, as `Command:` and one backticked command.
 
 Same grammar, same states in the review comment, same block on anything unverified. Skipping the
 Spec is not a way to skip the tests.
@@ -356,6 +371,47 @@ The tag is the only thing that decides a Slice needs a person. `/dispatch-slices
 as needing a human when and only when one of its Criteria carries the tag. No inference from labels,
 no inference from wording. A Criterion is tagged because automating its check is not worth it, not
 because it is hard to write.
+
+`[manual]` means a person must check this, and nothing else. A check a session can run is never
+`[manual]`, even when the session that reaches it cannot run it: that is a `[command]` Criterion
+that was not run, below.
+
+### The `[command]` tag
+
+A Criterion proven by running a command rather than by a test carries `[command]` immediately after
+its id, and names the command on a `Command:` line that closes the Criterion:
+
+```
+### C4 [command]
+WHEN the ledger migration is submitted to the sandbox warehouse as a dry run THE SYSTEM SHALL accept it
+Command: `uv run python scripts/dry_run.py --target sandbox migrations/ledger.sql`
+```
+
+It is for a check no test can carry an id for: a dry run against a sandbox, a schema or vendor
+check, a build that must succeed. The command exits 0 exactly when the Then holds. One that can exit
+0 with the Then false, a linter that only warns or a script that skips itself when a credential is
+absent, is the wrong command.
+
+| Where | What it carries |
+| --- | --- |
+| The Spec file | `### C4 [command]`, and the `Command:` line as the Criterion's last line |
+| The Spec issue body | `- C4 [command] {summary}`. The command stays in the file |
+| A Slice citing the Spec | `- [ ] #60 C4 [command] {summary}`. The command is read from the file |
+| A lone Slice | ``- [ ] #74 C2 [command] {summary}. Command: `{command}` `` |
+
+The rules:
+
+- **One tag at most.** A Criterion is `[manual]`, `[command]`, or untagged and proven by a test.
+- **One command**, run from the root of the pull request's checkout, exactly as written.
+- **Read-only.** It observes. It does not deploy, push, migrate a shared database, or write outside
+  the checkout. A check that has to change shared state to prove anything is a person's to run, and
+  is `[manual]`.
+- **Not a gate `/finalize-pr` already runs.** Lint, typecheck, format and the test suite gate every
+  pull request. A Criterion that restates them proves nothing about this Slice. A check the
+  repository runs that `/finalize-pr` does not, such as a vendor check, is a fair `[command]`.
+- **Not a reason for a person.** `/dispatch-slices` classifies a `[command]` Slice as AFK. When the
+  command needs a credential the session lacks, the Criterion is reported as not run and blocks,
+  and a person with the credential re-runs `/finalize-pr`. The tag does not change.
 
 ## The test name
 
@@ -481,10 +537,10 @@ what was proven, not what was attempted.
 
 | State | Rule |
 | --- | --- |
-| **verified** | A test whose name carries the Criterion's id exists, and the test gate passed |
-| **weak** | Code in the diff appears to implement it, but no test carries the id |
+| **verified** | A test whose name carries the Criterion's id exists, and the test gate passed. For a `[command]` Criterion: its command exited 0 on the pull request's head |
+| **weak** | Code in the diff appears to implement it, but no test carries the id. Never a `[command]` Criterion |
 | **manual** | The Criterion carries `[manual]`; listed for the human to check, with its frame where it has one |
-| **unverified** | Neither a test carrying the id nor identifiable code in the diff |
+| **unverified** | Neither a test carrying the id nor identifiable code in the diff. For a `[command]` Criterion: its command failed, was not run, or is not named |
 
 Shape in the comment:
 
@@ -494,12 +550,29 @@ Shape in the comment:
 - verified    #60 C1 - `test/loyalty/earn.test.ts:14`, test gate green
 - manual      #60 C2 - check the cart summary renders "240 points" - [frame](https://github.com/o/r/blob/ui-evidence/pr-64/60-c2-cart-summary-balance.png?raw=true)
 - weak        #60 C3 - `src/auth/client.ts:88`, no test carries the id
+- verified    #60 C4 - `uv run python scripts/dry_run.py --target sandbox migrations/ledger.sql` exited 0 on `3f9a2c1`, run by /finalize-pr
 ```
+
+A `[command]` Criterion is the command, the head it ran on, and its result. The other outcomes:
+
+```markdown
+- verified    #60 C4 - `uv run python …` passed on `3f9a2c1` in CI check `dry-run` (https://github.com/o/r/actions/runs/123)
+- unverified  #60 C4 - `uv run python …` exited 1 on `3f9a2c1`: `ERROR: column ledger.points_ref not found`
+- unverified  #60 C4 - `uv run python …` not run: needs `SANDBOX_SA_KEY`, which this session does not have
+```
+
+A `[command]` Criterion is never `weak`. The command passed on this head or it did not, and code
+that looks right is not a run. A command that was not run, for any reason, is `unverified` and
+blocks, in every repository, test Seam or not. It is never reported as passed.
+
+A CI check counts only when its workflow runs that exact command and the check ran on the pull
+request's head. Otherwise `/finalize-pr` runs the command itself.
 
 **verified is the only state that means the behaviour holds.** `weak` means there is code, which is
 what "verified" used to mean and is why these four states exist.
 
-`/finalize-pr` blocks on any `unverified`, in every repository, and never blocks on `manual`. It
+`/finalize-pr` blocks on any `unverified`, in every repository, `[command]` Criteria included, and
+never blocks on `manual`. It
 blocks on a **declared frame that did not get produced**, which is a failed gate rather than a
 judgement about the Criterion, and is reported as one.
 
@@ -515,6 +588,37 @@ Red-before-green ordering is not checked. A test carrying the id and a green gat
 contract.
 
 Above ten Criteria on one Slice, `/finalize-pr` warns. It never blocks on the count.
+
+### `/finalize-pr` never edits a Criterion
+
+It ticks the checkbox of each `verified` Criterion on the Slice and changes no other byte of the
+Slice body. Never a Criterion's text, never its id, never its tag, and never ids added to a Slice
+that has none. The run holds every Criterion to the tag it found, and anything that looks wrong is
+reported in the review comment and in the run's summary, for a person to fix on the tracker.
+
+A skill that can retag a Criterion can pass its own gate, and the gate then proves nothing. Worked
+example, from gr4vy/gr4ce#470: two Criteria were checks a session runs, a sandbox dry run of the SQL
+and the repository's vendor check. No test could carry their ids, so the four states could only
+call them `weak`, which blocks where there is a test Seam, or `[manual]`. The session retagged both
+`[manual]` on the issue to clear the gate, though it had run both itself.
+
+Under this contract, a Slice with an untagged Criterion like those reports:
+
+```markdown
+- weak        #60 C6 - `migrations/ledger.sql:1`, no test carries the id
+ⓘ Tag: #60 C6 reads as a command ("dry_run.py against the sandbox accepts the SQL") and carries no tag. Tag it `[command]` with its `Command:` line on the tracker and re-run. This run held it to the untagged rule.
+```
+
+It blocks, and the body is untouched. Once a person tags it, the next run executes the command and
+reports `verified` or `unverified` on what the command returned. The other things reported rather
+than repaired:
+
+| Found | Reported as |
+| --- | --- |
+| A Slice whose checkboxes carry no ids | `ⓘ Ids: the Slice's Criteria carry no ids, so no test can be matched to one` |
+| A checkbox tag that disagrees with the Spec file | `ⓘ Tag: #60 C4 is [command] in the Spec file and [manual] on #62. The file wins; fix #62` |
+| A `[command]` Criterion with no `Command:` line | `unverified`, with `no command named` as its evidence |
+| A `[manual]` Criterion whose check is a command | `ⓘ Tag: #60 C2 is [manual] and its check is a command a session can run. Retag it [command]`. It is still reported `manual` |
 
 The `/finalize-pr` review comment carries no code-review and no spec-drift section. Those belong to
 `/review-pr`, which `/finalize-pr` hands a Not blocking PR to.

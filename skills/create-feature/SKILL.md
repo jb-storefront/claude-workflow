@@ -46,6 +46,10 @@ One per behaviour the feature guarantees, observed at the Seam. Then one for eac
 behaviour the change could plausibly break. A new dependency, a migration or a breaking change is a
 Criterion or a `## Worth deciding` entry.
 
+A Criterion proven by running a command rather than by a test, such as a dry run against a sandbox
+or a vendor check, is tagged `[command]` and names the exact command, in the shape the reference
+gives. Never tag a check a session can run `[manual]`.
+
 ## Feature description
 
 `$ARGUMENTS`

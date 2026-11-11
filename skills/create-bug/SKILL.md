@@ -57,6 +57,11 @@ The first Criterion is the one that goes **red** on the bug today: the defect, o
 Then one per behaviour the fix guarantees, and one for each existing behaviour the fix's change
 could plausibly break. Severity stays in the body.
 
+A Criterion proven by running a command rather than by a test, such as a dry run against a sandbox
+or a vendor check, is tagged `[command]` and names the exact command, in the shape the reference
+gives. Run it while reproducing: it should fail on the default branch today if it is the red one.
+Never tag a check you can run `[manual]`.
+
 ## Bug description
 
 `$ARGUMENTS`

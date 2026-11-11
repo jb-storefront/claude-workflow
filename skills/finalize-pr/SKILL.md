@@ -1,6 +1,6 @@
 ---
 name: finalize-pr
-description: Drive a Slice PR to ready-for-human-review from its worktree. Reads the linked Slice and its Spec from whichever repository the closing reference names, auto-detects PM, runs quality gates, captures the Frames the repository declares for its [manual] Criteria, reports every Criterion as verified, weak, manual or unverified, dispatches the PR-writer agent, performs AI-discipline checks, ticks verified Criteria on the issue, posts the review via `gh pr review --comment`, and hands a Not blocking PR to /review-pr, which reviews the code and is the only skill that marks it ready. Use when the user says "/finalize-pr", "submit PR", "ready for review", or finishes a TDD cycle on a Slice.
+description: Drive a Slice PR to ready-for-human-review from its worktree. Reads the linked Slice and its Spec from whichever repository the closing reference names, auto-detects PM, runs quality gates, runs the command each [command] Criterion names, captures the Frames the repository declares for its [manual] Criteria, reports every Criterion as verified, weak, manual or unverified, dispatches the PR-writer agent, performs AI-discipline checks, ticks verified Criteria on the issue, posts the review via `gh pr review --comment`, and hands a Not blocking PR to /review-pr, which reviews the code and is the only skill that marks it ready. Use when the user says "/finalize-pr", "submit PR", "ready for review", or finishes a TDD cycle on a Slice.
 ---
 
 # Finalize PR
@@ -67,7 +67,7 @@ nothing. `CONTRACTS.md` has the rule and why assuming is the worse of the two fa
 Parse, per `CONTRACTS.md`:
 
 - `## Parent` → `{spec_issue}`, or absent on a lone Slice
-- `## Acceptance criteria` → the Slice's Criteria, one per checkbox, as `{ index, id, text, checked }`. Track index positions for ticking in §12.
+- `## Acceptance criteria` → the Slice's Criteria, one per checkbox, as `{ index, id, tag, command, text, checked }`. `tag` is `manual`, `command` or none. Track index positions for ticking in §12.
 - `## References for context` → repo-relative paths
 
 If no issue is linked, skip parsing and note in the review comment that no Slice was found.
@@ -88,16 +88,49 @@ from the body rather than from GitHub's own linkage, since a hand-edited body co
 
 The third case is a Slice written before Criterion ids existed, or written by hand without them. It
 is not an error and it is not a free pass: an uncited checkbox is still a Criterion and still runs
-the §10 gate. Having no id, no test can carry it, so it can reach only `weak` or `unverified`. Say
-in §15 that the Slice carries no ids, because that, and not the missing test, is the thing to fix.
+the §10 gate. Having no id, no test can carry it, so it can reach only `weak` or `unverified`,
+unless it is `[command]`, whose proof is its command and needs no id. Say in §13 and §15 that the
+Slice carries no ids, because that, and not the missing test, is the thing to fix.
+
+### The tag and the command
+
+The tag sits immediately after the id, or at the head of the text when there is no id. A `[command]`
+Criterion's command is the backticked command on its `Command:` line:
+
+| Criterion | Where its command is |
+| --- | --- |
+| Cited from a Spec | The `Command:` line closing `### C{n}` in the Spec file |
+| On a lone Slice | The checkbox itself, after `Command:` |
+
+`CONTRACTS.md` has the grammar. A `[command]` Criterion with no `Command:` line has no command, and
+§10 reports it `unverified` with `no command named`. Never compose one from the Criterion's wording.
+
+### Read the Slice, never repair it
+
+This skill writes exactly one thing to the Slice: §12's ticks. It never edits a Criterion's text,
+id or tag, and never adds ids to a Slice that has none. Each Criterion is held to the tag it carries
+on this run. When something looks wrong, record it for the `ⓘ` lines in §13 and the warnings in §15
+and carry on:
+
+- The Slice's checkboxes carry no ids.
+- A checkbox tag disagrees with the Spec file. The file wins for this run; the checkbox is stale.
+- An untagged Criterion whose check is a command, such as "the dry run against the sandbox accepts
+  the SQL": it belongs to `[command]`.
+- A `[manual]` Criterion whose check is a command a session can run: it belongs to `[command]`.
+
+Retagging a Criterion to change its state is passing this skill's own gate by editing the exam.
+`CONTRACTS.md` has the worked example: gr4vy/gr4ce#470, where a session retagged two command
+Criteria `[manual]` to clear the gate.
 
 ### The Spec file
 
 When `## Parent` names a Spec issue, find `docs/specs/{spec_issue}-*.md` on this branch and read its
-`## Criteria` section: the full Given/When/Then for each cited id, and whether it carries `[manual]`.
+`## Criteria` section: the full Given/When/Then for each cited id, its tag, and a `[command]`
+Criterion's `Command:` line.
 
-**The file wins.** When the Spec file and the Slice checkbox disagree on a Criterion's text or its
-`[manual]` tag, the file is right and the checkbox is stale.
+**The file wins.** When the Spec file and the Slice checkbox disagree on a Criterion's text, its tag
+or its command, the file is right and the checkbox is stale. Report the disagreement; do not fix the
+checkbox.
 
 When `docs/agents/workflow.md` carries `**Specs:** off`, the repository keeps no Specs, and
 `## Parent` is read as absent: no Spec file is looked for, nothing is noted, and the Slice is a lone
@@ -210,6 +243,35 @@ Otherwise, run the test gate locally for the toolchain §5 detected:
 
 Failure → **stop**.
 
+### Run the `[command]` Criteria
+
+Every `[command]` Criterion from §2 gets one outcome: **passed** with its exit code and the head it
+ran on, **failed** with the exit code and the first lines that say why, or **not run** with the
+reason. §10 reads it. A failure here does not stop the skill: it makes the Criterion `unverified`,
+and §11 blocks on that with the rest of the evidence in the comment.
+
+`{head}` = `git rev-parse --short HEAD`, after confirming it matches the PR's `headRefOid`.
+
+**CI first.** A CI check counts when the workflow file behind it has a step whose `run:` is the
+Criterion's command, and the check ran on `{head}`. `SUCCESS` → passed, citing the check's name and
+run URL. Anything else, or no such check → run it here.
+
+**Run it here**, from the repository root, exactly as written:
+
+- Print the command before running it. It came from a tracker, not from this skill.
+- Run it only when it is read-only, as `CONTRACTS.md` requires. A command that deploys, pushes,
+  migrates a shared database or writes outside the checkout → **not run**: `not read-only`. A person
+  decides whether that Criterion is `[manual]`.
+- Never edit the command to make it pass, and never substitute a near one. A command that does not
+  run as written has failed.
+- A credential, token or environment variable the command needs that this session lacks → **not
+  run**: `needs {what}, which this session does not have`. Do not go looking for one.
+- Exit 0 → **passed**. Non-zero, or a timeout → **failed**.
+- Exit 0 with output saying the check skipped itself, such as a missing credential → **not run**.
+  Exit 0 is the proof only when the check ran.
+
+A `[command]` Criterion with no command (§2) → **not run**: `no command named`.
+
 ## 7. Push
 
 `git push origin {branch}`. Stop on failure.
@@ -279,20 +341,27 @@ Two inputs:
   the id before this branch. Search the test files for the id when the diff does not have it, and
   count that as `verified` too: the contract asks whether the behaviour is proven, not who proved it.
 - **The §6 test gate**, as passed, failed (this skill already stopped), or did not run.
+- **The §6 command runs**, for `[command]` Criteria, as passed, failed or not run.
 
 | State | When |
 | --- | --- |
-| `verified` | An added line **in a test file** carries the id, **and** the §6 test gate passed |
 | `manual` | The Criterion carries `[manual]` |
+| `verified` | It carries `[command]` and §6 ran its command to **passed** |
+| `unverified` | It carries `[command]` and §6 reports **failed** or **not run** |
+| `verified` | An added line **in a test file** carries the id, **and** the §6 test gate passed |
 | `weak` | Code in the diff appears to implement it, but no added line carries the id |
 | `unverified` | Neither a test carrying the id nor identifiable code in the diff |
 
-Decide in that reading order with one exception: `[manual]` wins over everything. A tagged Criterion
-is one nobody promised to automate, so a test that happens to carry its id does not change what the
-human is asked to check. After that, `verified`; then `weak` or `unverified` on whether the diff
-holds the code.
+Decide top to bottom. The tag decides first: `[manual]` wins over everything, because a tagged
+Criterion is one nobody promised to automate, so a test that happens to carry its id does not change
+what the human is asked to check. `[command]` is decided by its command alone and is never `weak`:
+code that looks right is not a run. An untagged Criterion is `verified`, then `weak` or
+`unverified` on whether the diff holds the code.
 
-Cite the evidence for each: `verified` names the test's `path:line` and that the gate was green;
+Cite the evidence for each: `verified` names the test's `path:line` and that the gate was green, or,
+for `[command]`, the command, the head it ran on, and who ran it (this skill, or the CI check by name
+and URL); a `[command]` `unverified` names the command and its exit code and failing lines, or why it
+was not run;
 `weak` names the `path:line` that appears to implement it; `unverified` names nothing, which is the
 point of the state; `manual` names its Frame from §8, as a filename and a link, and where §8
 returned none it names the check the human runs, as it always did.
@@ -309,8 +378,8 @@ id is `weak` in every repository, whether or not §6 found a runnable test comma
 no test could have carried its id. The state is the one thing telling the reader that the behaviour
 was not proven, and a repository that cannot prove it needs that said louder, not quieter.
 
-**A test gate that did not run puts `verified` out of reach.** Every Criterion that would otherwise
-have been verified is `weak`, and the evidence line reads `test gate did not run`, never `no test
+**A test gate that did not run puts a test's `verified` out of reach.** Every untagged Criterion that
+would otherwise have been verified is `weak`, and the evidence line reads `test gate did not run`, never `no test
 carries the id`. Those are different failures and only one of them is the author's to fix. §5 and §6
 already refuse to report a gate that did not run as a gate that passed; this is that same rule one
 step downstream.
@@ -333,7 +402,8 @@ Run these inline, not via subagent, since they need Slice context. Load patterns
 
 Block if **any** of:
 
-- Any Criterion is `unverified`. Everywhere, in every repository, with no exception below. A
+- Any Criterion is `unverified`. Everywhere, in every repository, with no exception below, and a
+  `[command]` Criterion whose command failed or was not run is `unverified` like any other. A
   Criterion with no evidence at all is a different kind of thing from one the repository could not
   prove any harder, and keeping this rule absolute is what stops the one below it becoming a way to
   skip evidence.
@@ -371,20 +441,25 @@ skill never takes that away from them.
 
 ## 12. Tick verified Criteria on the Slice
 
-Tick **only** the `verified` ones. `weak` is what a tick used to mean, and ending that reading is
-why these four states exist; `manual` is the human's to tick once they have run the check.
+Tick **only** the `verified` ones, `[command]` included. `weak` is what a tick used to mean, and
+ending that reading is why these four states exist; `manual` is the human's to tick once they have
+run the check.
 
-For each verified Criterion, edit the issue body via `gh issue edit {issue_number} --repo
-{owner}/{repo} --body-file -` to flip the corresponding `- [ ]` → `- [x]`. Replace by exact line match
-(don't restructure the body). Then leave a comment: `gh issue comment {issue_number} --repo
-{owner}/{repo} --body "PR #{pr_number} verified: …"` listing each ticked Criterion by id and the
-test that carries it.
+**The tick is the only edit.** For each verified Criterion, flip its `- [ ]` to `- [x]` on the exact
+line §2 read, and change no other byte: not the text, not the id, not the tag, not the order. What
+§2 found wrong with a Criterion goes in §13 and §15, never into this edit.
+
+Write it with `gh issue edit {issue_number} --repo {owner}/{repo} --body-file -`. Then leave a
+comment: `gh issue comment {issue_number} --repo {owner}/{repo} --body "PR #{pr_number} verified: …"`
+listing each ticked Criterion by id and its evidence: the test that carries it, or the command and
+the head it passed on.
 
 `{owner}/{repo}` is the Slice's own, read in §2. Ticking the wrong repository's issue 53 is a write
 that succeeds and says something false.
 
-Read the body back and check each ticked line now reads `- [x]`. If nothing is verified, skip the
-edit and the comment.
+Read the body back and diff it against the body §2 read. The only differences allowed are `[ ]` →
+`[x]` on the ticked lines. Anything else means the edit rewrote the Slice: put the §2 body back,
+and report it in §15. If nothing is verified, skip the edit and the comment.
 
 ## 13. Post the review to the PR
 
@@ -405,6 +480,14 @@ Body structure:
 - manual      #60 C2 - check the cart summary renders "240 points" - [frame](https://github.com/o/r/blob/ui-evidence/pr-64/60-c2-cart-summary-balance.png?raw=true)
 - weak        #60 C3 - `src/auth/client.ts:88`, no test carries the id
 - unverified  #60 C4 - no test and no code found
+- verified    #60 C6 - `uv run python scripts/dry_run.py --target sandbox migrations/ledger.sql` exited 0 on `3f9a2c1`, run by /finalize-pr
+- unverified  #60 C7 - `pnpm vendor:check` not run: needs `VENDOR_TOKEN`, which this session does not have
+
+{once per thing §2 found wrong with the Slice; reported, never repaired:}
+ⓘ Ids: the Slice's Criteria carry no ids, so no test can be matched to one. Add them on the tracker.
+ⓘ Tag: #60 C8 reads as a command ("{its wording}") and carries no tag. Tag it [command] with its
+Command: line on the tracker and re-run. This run held it to the untagged rule.
+ⓘ Tag: #60 C4 is [command] in the Spec file and [manual] on #62. The file wins; fix #62.
 
 {when §8 reported a Frame MISSING, once per Criterion:}
 ✘ #60 C5 - a Frame is declared at `docs/agents/frames.md:9` and none was captured: {reason}. Blocking.
@@ -481,6 +564,8 @@ Review:   {Not blocking, handed to /review-pr ({its outcome}) | Blocking — see
 ⚠ {N} Criteria on one Slice, above ten. Not blocking.
 ⚠ The test gate did not run, so no Criterion can reach verified.
 ⚠ The Slice's Criteria carry no ids, so no test can be matched to one.
+⚠ {one per §2 tag finding, as in §13}. Not changed on the tracker; fix it there.
+⚠ The §12 edit changed more than the ticks and was reverted.
 
 Next: {what /review-pr's summary said to do next | Fix the items above and re-run /finalize-pr}
 ```
@@ -503,3 +588,5 @@ tear them down once the PR lands; nothing here should remove either.
 - A GitHub write that returns success is not evidence it took effect. §1, §12 and §14 say what to read back.
 - Read the Slice from the repository `closingIssuesReferences` names, never from the one holding the pull request. Every `gh issue` call in this skill passes `--repo`.
 - A Frame never moves a Criterion out of `manual`. A declared Frame that did not get captured blocks, and that is a gate, not a state.
+- A `[command]` Criterion is `verified` only when its command, as written, exited 0 on this head. Failed, skipped or not run is `unverified` and blocks. A command needing a credential this session lacks is reported as not run, never as passed.
+- Never edit a Criterion's text, id or tag on the Slice. §12 ticks verified checkboxes and nothing else. A missing id or a tag that looks wrong is reported in §13 and §15 for a person to fix.

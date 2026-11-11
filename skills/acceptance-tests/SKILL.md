@@ -65,7 +65,8 @@ stopping on the Spec file it does not have would make every Slice in the repo un
   `ls docs/specs/{parent-number}-*.md`; a worktree is cut from the remote default branch, so it is
   already there.
 - Read its `## Criteria` section. For every id the Slice cites, take the whole Criterion: its
-  Given/When/Then or its EARS line, and its `[manual]` tag if it carries one.
+  Given/When/Then or its EARS line, its `[manual]` or `[command]` tag if it carries one, and a
+  `[command]` Criterion's `Command:` line.
 - A cited id with no matching Criterion in the file, or a Spec file that does not exist, is a
   **stop**. Report which id and which path. Writing a test from a one-line summary is how a
   Criterion quietly becomes whatever the agent assumed it meant.
@@ -90,7 +91,8 @@ stopping on the Spec file it does not have would make every Slice in the repo un
   The read-back is not ceremony. `/finalize-pr` matches a test to a checkbox on those literal bytes,
   so ids that exist only inside test names leave every Criterion unverified at the gate.
 
-`[manual]` Criteria are set aside here and carried to §7. They get no test.
+`[manual]` and `[command]` Criteria are set aside here and carried to §7. They get no test: a
+person checks the first, and `/finalize-pr` runs the second's command.
 
 ## 3. Confirm the Seam
 
@@ -217,6 +219,7 @@ Criteria
   #60 C3  test renamed     test/auth/client.test.ts:88      failing
   #60 C5  already carried  test/auth/client.test.ts:120     failing
   #60 C2  [manual]         the human checks: {the Then}
+  #60 C4  [command]        /finalize-pr runs: {the command}
 
 Test run: {command}
   {N} failing, {M} passing. Every Criterion test above is red.
@@ -234,9 +237,9 @@ check nobody does.
 
 - No test at an unconfirmed Seam, and no Seam inferred from labels, filenames, or the Slice's
   wording when the section is absent. Ask, or stop.
-- One test per non-manual Criterion, and the count is checkable: N cited non-manual Criteria leave N
+- One test per untagged Criterion, and the count is checkable: N cited untagged Criteria leave N
   tests on the branch, each carrying its id.
-- Never write a test for a `[manual]` Criterion, and never drop one from the summary.
+- Never write a test for a `[manual]` or `[command]` Criterion, and never drop one from the summary.
 - Never touch production code. Not a stub, not a scaffold, not an import that makes a test compile.
   A missing symbol is a valid red.
 - Never weaken an assertion, and never delete an existing test. Rename it if it covers the
