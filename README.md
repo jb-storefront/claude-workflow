@@ -81,7 +81,8 @@ the repo is offered both plugins when they first trust the workspace:
       /tdd              →  red-green-refactor to the acceptance criteria               (Pocock)
       /frames           →  capture what a [manual] criterion says a person would see
       /finalize-pr      →  gates, Criteria, PR description; hands a passing PR on
-      /review-pr        →  code review, security review and spec drift; the only skill that marks ready
+      /review-pr        →  code review, security review and spec drift; the only skill that marks ready;
+                           hands the PR to Copilot and a cloud Auto-fix session that answers it
 /merge-stack         →  land the batch in dependency order, tearing down worktrees
 ```
 
@@ -203,6 +204,16 @@ nothing if it lands after the branch and PR it was meant to protect.
 **The human still pulls the merge trigger.** `/finalize-pr` and `/review-pr` only ever comment,
 never `--approve`, so an empty `reviewDecision` is the normal state across a batch — `/merge-pr` and
 `/merge-stack` both treat it as such rather than as a missing gate.
+
+**Copilot is answered in the cloud, and its fixes are re-reviewed before they merge.** Once
+`/review-pr` marks a PR ready it starts an Auto-fix session (Claude Code's own, in a cloud session)
+that fixes or declines each Copilot thread and failing check, up to three Copilot passes. That needs
+the Claude GitHub App on the repository and cloud sessions on the plan; without them the PR is still
+ready and the summary says Auto-fix did not start. Copilot is the only reviewer the session's
+commits meet, so `/merge-pr` and `/merge-stack` refuse a head newer than the latest `/review-pr`
+summary, merge with `--match-head-commit`, and stop the session before they touch the branch.
+Repositories with a Copilot ruleset that reviews on push get every pass; without one, Copilot sees
+the first push only.
 
 **Nothing discards work to tidy up.** `claude rm` keeps a worktree that holds uncommitted changes
 or unpushed commits, and for unpushed commits it prints the `--discard-unpushed` value that would

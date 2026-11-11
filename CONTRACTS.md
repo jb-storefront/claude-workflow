@@ -522,15 +522,20 @@ The `/finalize-pr` review comment carries no code-review and no spec-drift secti
 ## The `/review-pr` summary comment
 
 `/review-pr` posts one issue comment per run, never edits an earlier one, and is the only skill that
-marks a PR ready. The first line, the `Head:`, `Reviewer:` and `Security:` lines, and the `###`
-headings are read by machines; keep their spelling.
+marks a PR ready. The first line, the `Head:`, `Reviewer:`, `Security:`, `Copilot:` and `Auto-fix:`
+lines, and the `###` headings are read by machines; keep their spelling. `merge-gate.py` reads the
+first line, `Head:` and `Auto-fix:` to decide whether a head was reviewed and which session to stop.
 
 ```markdown
 ## /review-pr — {Ready | Draft}
 
+{Only when Copilot did not run on a Ready PR: "Copilot did not run: {why}."}
+
 Head: `{the reviewed head commit, first 7}`
 Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved | changes_requested}, {C} Critical, {H} High
 Security: `{vendor} ({model})` — {H} High, {M} Medium, {L} Low
+Copilot: {requested by the repository's ruleset | requested by /review-pr | did not run: {why} | not requested: Draft}{; later passes: on push | ; later passes: none, the repository does not review on push}
+Auto-fix: {[session_…](https://claude.ai/code/session_…) — {started | already watching} | not started: {why} | not started: Draft}
 
 ### Blocking findings
 - High — `src/auth/client.ts:88` — the token is logged in plain text
@@ -557,8 +562,36 @@ review, never one that was skipped or returned nothing.
 
 `Ready` means the reviewer named on the `Reviewer:` line and the security reviewer named on the
 `Security:` line both reviewed the commit on the `Head:` line, nothing either found blocks, and the
-PR read back as ready before the comment was posted. A later push needs a later summary: an earlier `Ready` says nothing about a
-commit it did not see.
+PR read back as ready before the comment was posted. It does not mean Copilot is clean: Copilot
+reviews a PR only once it is ready, and the Auto-fix session answers it after this comment is
+posted. A later push needs a later summary: an earlier `Ready` says nothing about a commit it did
+not see, and `/merge-pr` and `/merge-stack` refuse a head the latest summary does not name. That is
+what stops an Auto-fix session's commits merging without the code and security reviews.
+
+## The Auto-fix comment
+
+The Auto-fix session `/review-pr` starts posts one comment each time it reaches an end state, from
+the founder's account and labelled as written by Claude Code. The prompt that asks for it is
+`references/autofix-instructions.md`.
+
+```markdown
+## Auto-fix — {Clean | Stopped at the pass cap | Stopped}
+
+### Copilot passes
+- `{reviewed commit, first 7}` — {N} threads — pushed `{commit, first 7}` (or "none")
+
+### Declined
+- {thread link} — {the reason}
+- (or "None.")
+
+### Still open
+- {thread or check link}
+- (or "None.")
+```
+
+It is a report, not a gate. `merge-gate.py` judges Copilot from the PR itself with
+`clean-predicate.py`, never from this comment, so a session that never posts one cannot make a PR
+look clean.
 
 ## The port block
 

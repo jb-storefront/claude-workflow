@@ -4,9 +4,9 @@
 Usage: clean-predicate.py [snapshot.json]    (reads stdin when no path is given)
 
 Clean means the latest Copilot pass covers the head commit, no review thread
-is unresolved, and every check is green. /review-pr (planned in #51) gathers
-the snapshot with `gh` and asks this script, so the predicate lives in one
-place instead of being re-derived in prose on every run.
+is unresolved, and every check is green. merge-gate.py gathers the snapshot
+with `gh` and asks this script before /merge-pr or /merge-stack merges, so the
+predicate lives in one place instead of being re-derived in prose on every run.
 
 The snapshot, every field required:
 
