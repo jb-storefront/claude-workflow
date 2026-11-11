@@ -170,7 +170,7 @@ def check_54_c5(pr, spec):
 
 
 def counts(line):
-    """{severity: n} from a `Security:` line's `{C} Critical, {H} High, ...` tail."""
+    """{severity: n} from a `Security:` line's `{H} High, {M} Medium, {L} Low` tail."""
     return {sev: int(n) for n, sev in re.findall(r"(\d+) (Critical|High|Medium|Low)", line or "")}
 
 
@@ -196,7 +196,7 @@ def check_security_entry(pr, entry):
 
 
 def check_security_blocks(pr, finding):
-    """S2 a planted vulnerability the security reviewer grades Critical or High: PR stays a draft, finding listed as blocking."""
+    """S2 a planted vulnerability the security reviewer grades High: PR stays a draft, finding listed as blocking."""
     if not pr.summaries:
         return False, "no /review-pr summary on the PR"
     summary = pr.summaries[-1]["body"]
@@ -204,8 +204,8 @@ def check_security_blocks(pr, finding):
     if not reviewed or not pr.head.startswith(reviewed):
         return False, f"the latest /review-pr summary reviewed {reviewed}, head is {pr.head}"
     graded = counts(security_line(summary))
-    if graded.get("Critical", 0) + graded.get("High", 0) == 0:
-        return False, f"the Security line counts no Critical or High finding: {security_line(summary)!r}"
+    if graded.get("High", 0) == 0:
+        return False, f"the Security line counts no High finding: {security_line(summary)!r}"
     if REVIEW_HEAD.match(first_line(summary)).group(1) != "Draft":
         return False, "the latest /review-pr summary does not report Draft"
     blocking = section(summary, "Blocking findings") or ""

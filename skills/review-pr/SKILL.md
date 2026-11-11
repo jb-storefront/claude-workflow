@@ -187,76 +187,35 @@ sequential within the chain and runs alongside the code reviewer, not after it.
 
 What those rules leave to this skill:
 
-- **A result** is a report ending in the four `SECURITY_*` sentinel lines below, zeros included. "No
-  vulnerabilities found." with four zeros is a result. A report without the sentinels is nothing,
-  and the walk moves on.
+- **A result** is a report ending in the three `SECURITY_*` sentinel lines the prompt asks for,
+  zeros included. "No vulnerabilities found." with three zeros is a result. A report without the
+  sentinels is nothing, and the walk moves on.
 - **The entry that ran** is the one §7 and §8 name, as `{vendor} ({model})`.
 - **When every entry fails**, **stop**: post nothing, and return a ready PR to draft (§1). A PR with
   no security review has not been reviewed, whatever the code reviewer said.
 
-**`codex` and `google`** get this prompt, through the subagent and model prefix `/critique-spec`
-§5 uses for the same vendor (`codex:codex-rescue` with `Run with --model {model}` unless the model is
-`default`; `antigravity:agy-rescue` with `MODEL: {model}` and no `--add-dir`):
+**One prompt, for every vendor.** Read
+[../../references/security-review-prompt.md](../../references/security-review-prompt.md), take the
+text under its `## Prompt` heading, and fill in `{pr_number}`, `{base}` (`{baseRefName}`) and
+`{head}`. Change nothing else. It is Anthropic's Claude Code security review, adapted only so that it
+runs the same on any vendor, so whichever entry runs, the review asks the same questions of the same
+diff and grades on the same scale.
 
-```
-You are reviewing a pull request for security vulnerabilities, not writing code. Do not
-edit, create, or delete any file, and do not run any command that changes state: no
-checkout, commit, stash, install, or fetch. Read and report only.
+Each vendor gets it through the subagent and model prefix `/critique-spec` §5 uses for that vendor:
 
-The change is pull request #{pr_number} at commit {head}. Its diff against its base is:
-
-  git diff origin/{baseRefName}...{head}
-
-Report only vulnerabilities this diff introduces that have real exploitation potential.
-Not style, not missing hardening, not theoretical issues, not code the diff did not
-change. For each finding:
-
-- {Critical | High | Medium | Low} — `path:line` — the vulnerability in one sentence
-  Exploit: a concrete scenario: who sends what, and what they get
-
-After your report, append these exact lines at the very end of your response, outside
-any code block:
-
-SECURITY_CRITICAL: <number>
-SECURITY_HIGH: <number>
-SECURITY_MEDIUM: <number>
-SECURITY_LOW: <number>
-
-With no findings, write "No vulnerabilities found." and four zeros.
-```
-
-**`claude`** is Claude Code's built-in security review, the `security-review` skill. Run it in a
-fresh subagent so it runs beside the code reviewer and the session that wrote the code does not
-review it: the Agent tool, `subagent_type: "general-purpose"`, the entry's model passed as
-`/critique-spec` §5 describes for a `claude` entry (with `default`, pass none; the subagent runs on
-this session's model, and that model is what §7 names). Prompt:
-
-```
-Invoke the `security-review` skill with the Skill tool, and do nothing else. Do not edit,
-create, or delete any file. When it finishes, reply with its report verbatim, then append
-these exact lines at the very end, outside any code block, counting the report's findings
-by severity (it grades HIGH, MEDIUM and LOW, so SECURITY_CRITICAL is 0):
-
-SECURITY_CRITICAL: 0
-SECURITY_HIGH: <number>
-SECURITY_MEDIUM: <number>
-SECURITY_LOW: <number>
-
-If the skill is not available to you, or fails, say so and append no sentinel lines.
-```
-
-The built-in reads the checkout, which §1 pinned to `{head}`, against `origin/HEAD`. Before
-dispatching it, `git rev-parse --verify -q origin/HEAD` must resolve; when it does not, run
-`git remote set-head origin {default}`, which writes only that remote ref. When `{baseRefName}` is
-not `{default}` (a stacked PR), the built-in's diff also holds the PRs beneath this one: a finding
-whose path is not in `gh pr diff {pr_number} --name-only` is listed as outside this PR and not
-counted.
+- **`codex`**: `codex:codex-rescue`, prefixed `Run with --model {model}` unless the model is
+  `default`.
+- **`google`**: `antigravity:agy-rescue`, prefixed `MODEL: {model}` with no `--add-dir`.
+- **`claude`**: the Agent tool with `subagent_type: "general-purpose"` (the prompt's read-only rule
+  forbids its write tools) and the entry's model passed as `/critique-spec` §5 describes. With
+  `default`, pass none: the subagent runs on this session's model, and that model is what §7 names.
 
 ## 5. Verdict
 
 Blocking when the reviewer returned `changes_requested`, the `code-review` fallback returned any
 Critical or High finding on its **Standards** axis, or the security reviewer that ran counted any
-Critical or High finding in this PR. The fallback stands in for the missing agent,
+High finding. The security prompt grades High, Medium and Low; its High is the same bar as a code
+reviewer's Critical or High: directly exploitable. The fallback stands in for the missing agent,
 so it gates what that agent gated; letting it only advise would make a repo with no reviewer agent
 the one place a Critical finding lands silently. Its **Spec** axis is the drift check and never
 blocks.
@@ -288,7 +247,7 @@ it. The heading's `Ready` or `Draft` and the `### Outcome` line are the state §
 the state it intended. The `Security:` line names the entry that ran, never one that was skipped or
 returned nothing.
 
-Every Critical and High finding, from the code reviewer and the security reviewer alike, goes under
+Every blocking finding, from the code reviewer and the security reviewer alike, goes under
 `### Blocking findings` with its `path:line`, so the person picking up a Draft PR does not have to
 open the full reports to learn what stopped it. Put each reviewer's whole report, sentinel lines
 included, in its own closing `<details>` block.
@@ -310,7 +269,7 @@ PR:       #{pr_number} — {pr_title}
 URL:      {pr_url}
 Head:     {head}
 Reviewer: {name} — {verdict}, {C} Critical, {H} High
-Security: {vendor} ({model}) — {C} Critical, {H} High, {M} Medium, {L} Low
+Security: {vendor} ({model}) — {H} High, {M} Medium, {L} Low
           {each entry skipped, and why: unavailable, or returned nothing}
           {with no list: "No Security reviewers list; /setup-workflow adds it."}
 Drift:    {N} advisory finding(s) | none
@@ -333,8 +292,9 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
   borrows the Critics list.
 - The claude floor is required. A list that does not end in `claude` stops the run before anything
   is dispatched.
-- The security review always runs, alongside the code review, on the same head. A Critical or High
-  security finding blocks exactly as a code-reviewer one does.
+- The security review always runs, alongside the code review, on the same head, with the one
+  prompt in `references/security-review-prompt.md` whichever vendor runs it. A High security finding
+  blocks exactly as a code-reviewer Critical or High does.
 - The `Security:` line names the entry that ran, never one that was skipped or returned nothing.
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an

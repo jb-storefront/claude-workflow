@@ -140,6 +140,59 @@ def test_no_other_skill_reads_the_list():
     return not readers, f"also read by: {', '.join(readers)}"
 
 
+PROMPT_FILE = ROOT / "references" / "security-review-prompt.md"
+
+
+def prompt_text():
+    """The text under the prompt file's `## Prompt` heading, inside its fence."""
+    text = PROMPT_FILE.read_text(encoding="utf-8")
+    m = re.search(r"^## Prompt\n+~~~text\n(.*?)\n~~~$", text, re.M | re.S)
+    return text, (m.group(1) if m else None)
+
+
+def test_one_prompt_runs_on_every_vendor():
+    """the security prompt fills from the PR, ends in the sentinels, and uses nothing only Claude Code has"""
+    if not PROMPT_FILE.is_file():
+        return False, f"{PROMPT_FILE.relative_to(ROOT)} does not exist"
+    text, prompt = prompt_text()
+    if prompt is None:
+        return False, "no fenced prompt under `## Prompt`"
+    problems = []
+    if not re.search(r"^\*\*Version:\*\* \d+$", text, re.M):
+        problems.append("no **Version:** line")
+    for placeholder in ("{pr_number}", "{base}", "{head}"):
+        if placeholder not in prompt:
+            problems.append(f"prompt has no {placeholder}")
+    for sentinel in ("SECURITY_HIGH:", "SECURITY_MEDIUM:", "SECURITY_LOW:"):
+        if sentinel not in prompt:
+            problems.append(f"prompt does not ask for {sentinel}")
+    # `!` expansion and the Task tool exist only in Claude Code; codex and agy would read them as prose.
+    if re.search(r"!`", prompt):
+        problems.append("prompt relies on Claude Code's ! command expansion")
+    if re.search(r"\bsub-tasks?\b", prompt, re.I):
+        problems.append("prompt relies on Claude Code sub-tasks")
+    if "origin/HEAD" in prompt:
+        problems.append("prompt diffs against origin/HEAD, not the PR's base")
+    if "Permission is hereby granted" not in text:
+        problems.append("the upstream MIT notice is missing")
+    return not problems, "; ".join(problems)
+
+
+def test_review_pr_sends_only_the_shared_prompt():
+    """/review-pr links the shared prompt and defines no security prompt of its own"""
+    text = REVIEW.read_text(encoding="utf-8")
+    problems = []
+    links = re.findall(r"\]\(([^)\s]*security-review-prompt\.md)\)", text)
+    if not links:
+        problems.append("does not link references/security-review-prompt.md")
+    for target in links:
+        if not (REVIEW.parent / target).resolve().is_file():
+            problems.append(f"links to {target}, which is not on disk")
+    if re.search(r"^SECURITY_[A-Z]+: ", text, re.M):
+        problems.append("defines its own SECURITY_* sentinels, so a second prompt lives in the skill")
+    return not problems, "; ".join(problems)
+
+
 def main():
     cases = [v for k, v in globals().items() if k.startswith("test_")]
     failed = 0
