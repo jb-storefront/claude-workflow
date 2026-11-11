@@ -443,15 +443,18 @@ the same answer: which standard was this held to, and why that one.
 
 ## 14. Hand off to `/review-pr` (conditional)
 
-- **Not blocking** → run `/review-pr {pr_number}`, inline in this session. It runs the code review with the spec-drift question, posts its own
-  summary, and marks the PR ready if the review does not block. Do not mark the PR ready here, and
-  do not background the hand-off: the session that owns the worktree is the one that can fix what
-  the review finds.
+- **Not blocking** → run `/review-pr {pr_number}`, inline in this session. It runs the code and
+  security reviews, marks the PR ready if neither blocks, hands it to Copilot and an Auto-fix
+  session, and posts its own summary. Do not mark the PR ready here, and do not background the
+  hand-off: the session that owns the worktree is the one that can fix what the review finds.
 - **Blocking** → do not invoke `/review-pr`. The PR must be a draft: if an earlier `/review-pr`
   marked it ready, return it with `gh pr ready {pr_number} --undo` and read
   `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` back as `true`. A PR failing its
-  Criteria must not stay ready, because `/merge-pr`'s draft gate is what stops it landing. Print the
-  fix list locally; do not post additional GitHub noise.
+  Criteria must not stay ready, because `/merge-pr`'s draft gate is what stops it landing. If
+  `python3 <this skill dir>/../../scripts/merge-gate.py --pr {pr_number}` names an
+  `.autofix.session`, tell it to stop, so it does not keep pushing onto a PR that fails its Criteria:
+  `claude -p "PR #{pr_number} is back to draft. Push nothing more until /review-pr hands it back." --cloud {session} --output-format json`.
+  Print the fix list locally; do not post additional GitHub noise.
 
 ## 15. Local summary
 

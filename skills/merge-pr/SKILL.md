@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Squash-merge an approved PR, tear down its worktree and session, and delete the branch. Hard-gates on review approval; soft-gates on CI; warns on BEHIND/DIRTY merge state and recommends /rebase-pr. Use when the user says "/merge-pr", "merge this PR", or wants to land an approved PR.
+description: Squash-merge an approved PR, tear down its worktree, its session and its Auto-fix session, and delete the branch. Hard-gates on review approval and on a /review-pr summary that names the head; soft-gates on CI and on Copilot being clean; warns on BEHIND/DIRTY merge state and recommends /rebase-pr. Use when the user says "/merge-pr", "merge this PR", or wants to land an approved PR.
 ---
 
 # Merge PR
@@ -18,7 +18,7 @@ Squash-merge an approved PR, then clean up what built it. For a *set* of finishe
 - `{branch}` = `git branch --show-current`
 - `{default_branch}` = `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`
 - Find the PR:
-  - With arg: `gh pr view {number} --json number,title,url,state,isDraft,headRefName,reviewDecision,statusCheckRollup,closingIssuesReferences`
+  - With arg: `gh pr view {number} --json number,title,url,state,isDraft,headRefName,headRefOid,reviewDecision,statusCheckRollup,closingIssuesReferences`
   - Without arg: `gh pr list --head {branch} --json … --limit 1`. If none, stop.
 - Validate state: `MERGED` → stop (no-op); `CLOSED` → stop; `isDraft=true` → **stop** ("Run `/review-pr {number}`; it marks the PR ready when its review does not block.").
 - **Locate the branch's worktree.** `git worktree list --porcelain` → `{wt}` for `{headRefName}`,
@@ -36,14 +36,50 @@ Check `{review_decision}`:
 - `REVIEW_REQUIRED` → **stop**: get a review first.
 - Empty/null → proceed with note: "No review policy configured." This is the *expected* state in this workflow, because `/finalize-pr` posts `--comment` reviews and never `--approve`.
 
-### 2b. CI checks (soft gate)
+### 2b. The reviewed head (hard gate)
+
+`/review-pr` reviews one head, marks the PR ready and hands it to an Auto-fix session, which keeps
+pushing fixes for Copilot's comments. Copilot is the only reviewer those commits meet. The latest
+`/review-pr` summary's `Head:` line is the record of what the code reviewer and the security
+reviewer saw, so ask the gate rather than reading the comments by eye:
+
+```bash
+python3 <this skill dir>/../../scripts/merge-gate.py --pr {pr_number} > {gate.json}
+```
+
+Exit 2 → **stop** and relay its `✘` line: a gate that could not run has not passed. Otherwise read
+`.reviewed.state`:
+
+- `fresh` → proceed.
+- `stale` → **stop**: "Commits landed after `/review-pr` reviewed `{.reviewed.head}`. Run
+  `/review-pr {number}` on the new head, then merge." This is the gate the Auto-fix session's
+  commits pass through; never offer to merge past it.
+- `blocked` → **stop**: the latest summary is `Draft` on this head. Its `### Blocking findings` say why.
+- `none` → **warn**: "No `/review-pr` summary on this PR, so nothing records a review of its code."
+  Ask: attempt anyway or abort? A PR opened by hand outside the workflow has none; one built by
+  `/dispatch-slices` should never be here.
+
+Keep `{.autofix.session}` for §5.
+
+### 2c. Copilot (soft gate)
+
+`.copilot` is [clean-predicate.py](../../scripts/clean-predicate.py)'s verdict on the same snapshot.
+
+- `clean` → proceed.
+- `pending` → **warn** with its reasons (a Copilot pass on its way, a running check) and ask: wait,
+  attempt, or abort?
+- `not-clean` → **warn**, listing each reason: open threads with their URLs, a failing check, a
+  Copilot pass on an older commit, or no pass at all. Ask: attempt anyway or abort? It is a warning,
+  not a stop, so that a human can approve over a thread they have read and disagree with.
+
+### 2d. CI checks (soft gate)
 
 Inspect `statusCheckRollup`:
 - All `SUCCESS`/`NEUTRAL` (or empty) → proceed.
 - Any `FAILURE`/`ERROR` → **warn** (branch protection may block) and ask: attempt anyway or abort?
 - Any `PENDING`/`QUEUED` → **warn** and ask: wait, attempt, or abort?
 
-### 2c. Merge state
+### 2e. Merge state
 
 `gh pr view {pr_number} --json mergeStateStatus --jq '.mergeStateStatus'`:
 - `CLEAN` / `HAS_HOOKS` → proceed.
@@ -63,14 +99,22 @@ URL:      {pr_url}
 Branch:   {head_ref}
 Worktree: {wt or "none"}  {session id and state, if any}
 Review:   {review_decision or "No reviews configured"}
+Reviewed: {head, first 7} by /review-pr {| none — confirmed above}
+Copilot:  {clean | pending | not-clean — confirmed above}
+Auto-fix: {session id | none}
 CI:       {All passed | Failing | Pending}
 Issues:   {linked_issues or "none"}
-Action:   Squash merge → {default_branch}, stop session, remove worktree, delete branch
+Action:   Squash merge {head, first 7} → {default_branch}, stop Auto-fix, stop session, remove worktree, delete branch
 ```
 
 ## 4. Squash merge
 
-`gh pr merge {pr_number} --squash --delete-branch`
+`gh pr merge {pr_number} --squash --delete-branch --match-head-commit {headRefOid}`
+
+`--match-head-commit` makes GitHub refuse the merge if the head moved after §1 read it. The
+Auto-fix session is still watching at this point, and a fix it pushes between the gate and the merge
+would otherwise land unreviewed. A refusal for that reason means: re-run `/merge-pr`, which reads the
+new head and stops at §2b until `/review-pr` has seen it.
 
 On failure: stop and report. Never retry automatically. Never `--admin`.
 
@@ -79,6 +123,17 @@ On failure: stop and report. Never retry automatically. Never `--admin`.
 A slice branch is pinned to its worktree: `git branch -D` fails with *"cannot delete branch … used
 by worktree at …"* until the worktree is gone, and `git worktree remove` refuses while Claude Code
 holds its lock for a running session. So the order is fixed — stop, remove, delete:
+
+- **Stop the Auto-fix session** named in §2b, if there is one:
+
+  ```bash
+  claude -p "PR #{pr_number} is merged. Stop watching it, push nothing more, and end." --cloud {session} --output-format json
+  ```
+
+  `{"ok": true}` means the message reached it. `ok: false` with an archived or missing session means
+  it had already stopped; report it and carry on. A merged PR gets no further review comments, so a
+  session that misses this message has nothing left to answer, but it is still told rather than left
+  holding a subscription to a closed PR.
 
 - **Stop the session** if `claude agents --json` still shows it running: `claude stop {id}`. Its
   transcript is kept and `claude attach {id}` still opens it.
@@ -147,6 +202,7 @@ from the main checkout.
 PR:       #{pr_number} — {pr_title}  [MERGED]
 Branch:   {head_ref}  [DELETED on remote{, and locally}]
 Worktree: {removed | kept — holds unpushed work, see above | none}
+Auto-fix: {stopped | already stopped | none}
 Issues:   {linked_issues or "none"}  [CLOSED]
 Spec:     {#60 closed out — see below | #60 still has 2 Slices open | none}
 ```
@@ -160,5 +216,8 @@ that, per §6's procedure.
 - Never `--admin`. Never retry a failed merge.
 - Always confirm in step 3.
 - Empty `reviewDecision` is normal here, not a blocker — `/finalize-pr` deliberately never approves.
+- Never merge a head the latest `/review-pr` summary does not name, and always pass
+  `--match-head-commit`, so the head that merges is the head that was reviewed.
+- Copilot being clean is a warning, not a gate: a human may approve over an open thread deliberately.
 - Stop the session before removing its worktree, and remove the worktree before deleting the branch.
 - Never discard a worktree's uncommitted changes or unpushed commits. `--discard-unpushed` and `git worktree remove --force` are the human's to run; report the command, don't run it.

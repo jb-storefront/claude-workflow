@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Run the local code review and the security review on a pull request with fresh-context reviewers and the spec-drift question, post one summary comment, and mark the PR ready when nothing blocks. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
+description: Run the local code review and the security review on a pull request with fresh-context reviewers and the spec-drift question, mark the PR ready when nothing blocks, hand it to Copilot and a cloud Auto-fix session, and post one summary comment. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
 ---
 
 # Review PR
@@ -10,6 +10,13 @@ Criteria; this skill reviews the code and its security, says what it found in on
 the only skill in the workflow that marks a PR ready. Ready therefore always means two reviewers that
 did not write the code, one for the code and one for its security, have looked at the head commit
 and nothing either found blocks.
+
+Once the PR is ready it goes to Copilot, and an Auto-fix session in the cloud answers each Copilot
+pass: it fixes or declines every thread, fixes failing checks, and pushes, until Copilot is clean or
+three passes have run. This skill does not wait for any of that. It starts the session and finishes.
+The Auto-fix session's commits are reviewed by Copilot alone, so `/merge-pr` and `/merge-stack`
+refuse a head newer than the latest summary, and a PR Auto-fix pushed to needs `/review-pr` again
+before it merges.
 
 It runs two ways, and they are the same run:
 
@@ -38,7 +45,10 @@ git fetch origin {headRefName} {baseRefName} {default}
   reads the PR's diff against it.
 - `{head}` = `headRefOid`. That is the commit this run reviews and the one the summary names.
 - `git branch --show-current` must be `{headRefName}`, and `git rev-parse HEAD` must equal
-  `{head}`. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
+  `{head}`. An Auto-fix session pushes to the PR, so a checkout that is only behind is the normal
+  state of a re-run: when `git status --porcelain` is empty and `HEAD` is an ancestor of `{head}`
+  (`git merge-base --is-ancestor HEAD {head}`), run `git merge --ff-only origin/{headRefName}` and
+  check again. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
   all mean a reviewer reading the working tree would read code that is not the PR. Say which
   (`git status -sb` shows ahead/behind) and what to run. Return the PR to draft first, as below.
 
@@ -82,7 +92,7 @@ It prints one `{vendor}\t{model}` per entry, in order.
   not `{vendor}, {model}`. Fixing it is an edit to `docs/agents/workflow.md`, not this skill's to
   make. A stop is never a pass (§1).
 - **No list, or no file** → it prints the Claude floor alone, `claude\tdefault`, and one `note:` line
-  saying `/setup-workflow` adds the list. Say that once, in §8. Never borrow the Critics list.
+  saying `/setup-workflow` adds the list. Say that once, in §9. Never borrow the Critics list.
 
 ([security-reviewers.py](../../scripts/security-reviewers.py) holds these rules so they are tested
 rather than re-read on every run.)
@@ -168,10 +178,10 @@ calls, and an ungraded finding cannot block, so without the grades the fallback 
 Its two axes are the two things the missing agent would have done: **Spec** is this drift check, and
 **Standards** is the architectural pass. It returns findings rather than sentinels, so:
 
-- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §7, each naming the Spec and the
+- Its **Spec**-axis findings go into `### Spec drift (advisory)` in §8, each naming the Spec and the
   behaviour, the same as an agent's `spec-drift:` lines. Advisory, like any other drift finding.
 - Its **Standards**-axis Critical and High findings count the way §5 counts `changes_requested`.
-- §7's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
+- §8's `Reviewer:` line names `code-review` as the reviewer that ran, so a reader of the PR knows
   which one produced the findings. Its verdict is `changes_requested` when the **Standards** axis
   holds any Critical or High finding and `approved` otherwise, with those two counts beside it.
 
@@ -190,7 +200,7 @@ What those rules leave to this skill:
 - **A result** is a report ending in the three `SECURITY_*` sentinel lines the prompt asks for,
   zeros included. "No vulnerabilities found." with three zeros is a result. A report without the
   sentinels is nothing, and the walk moves on.
-- **The entry that ran** is the one §7 and §8 name, as `{vendor} ({model})`.
+- **The entry that ran** is the one §8 and §9 name, as `{vendor} ({model})`.
 - **When every entry fails**, **stop**: post nothing, and return a ready PR to draft (§1). A PR with
   no security review has not been reviewed, whatever the code reviewer said.
 
@@ -208,7 +218,7 @@ Each vendor gets it through the subagent and model prefix `/critique-spec` §5 u
 - **`google`**: `antigravity:agy-rescue`, prefixed `MODEL: {model}` with no `--add-dir`.
 - **`claude`**: the Agent tool with `subagent_type: "general-purpose"` (the prompt's read-only rule
   forbids its write tools) and the entry's model passed as `/critique-spec` §5 describes. With
-  `default`, pass none: the subagent runs on this session's model, and that model is what §7 names.
+  `default`, pass none: the subagent runs on this session's model, and that model is what §8 names.
 
 ## 5. Verdict
 
@@ -231,7 +241,7 @@ actually in rather than the one this run meant to leave it in.
 - **Not blocking** → `gh pr ready {pr_number}` when `isDraft` is true, then **verify**:
   `gh api "repos/{owner}/{repo}/pulls/{pr_number}" --jq '.draft'` must be `false`. If it still
   reads `true`, the outcome is `Draft` with the reason that `gh pr ready` did not take; post that
-  summary in §7, then stop and report. `/merge-pr` hard-stops on drafts, so a PR that silently
+  summary in §8, then stop and report. `/merge-pr` hard-stops on drafts, so a PR that silently
   stayed a draft is a PR nobody can land.
 - **Blocking** → the PR stays a draft. If it was already ready (a re-run after a push), return it to
   draft with `gh pr ready {pr_number} --undo` and read `.draft` back as `true`. A ready PR whose head
@@ -239,13 +249,96 @@ actually in rather than the one this run meant to leave it in.
 
 `{owner}` and `{repo}` are **literal** in `gh api` paths: `gh` fills them from the current repo.
 
-## 7. Post the summary
+## 7. Hand the PR to Copilot and Auto-fix (Ready only)
+
+Only when §6 read the PR back as ready. A Draft PR goes to neither: Copilot would review code
+already known to change, and the session would push fixes onto a head that blocks.
+
+### The repository's Copilot rules
+
+```bash
+gh api "repos/{owner}/{repo}/rules/branches/{baseRefName}" \
+  --jq '[.[] | select(.type == "copilot_code_review") | .parameters]'
+```
+
+GitHub returns the rules every active ruleset applies to the base branch, so this needs no reading
+of ruleset conditions. `{auto}` is true when any rule is listed: one requests Copilot when a PR is
+marked ready. `{on_push}` is true when any has `review_on_push: true`: Copilot reviews each later
+push, which is what lets the Auto-fix session reach a second and third pass. The session has no tool
+to request a reviewer (it works through GitHub's MCP tools, not `gh`), so without `{on_push}` the
+first pass is the only one.
+
+A `gh api` error here is not a rule: treat both as false and name the error on the `Copilot:` line.
+
+### The first Copilot pass
+
+- **`{auto}`** → wait up to a minute for a `review_requested` event naming `Copilot` in
+  `gh api "repos/{owner}/{repo}/issues/{pr_number}/timeline" --paginate`, created after the PR was
+  marked ready. When it appears, the ruleset made the request: do not request again. When it does
+  not, fall through to the next bullet.
+- **Otherwise** → `gh pr edit {pr_number} --add-reviewer "@copilot"`. Never an `@copilot` comment.
+  Read the timeline back for the `review_requested` event; a command that succeeded with no event
+  has not requested anything.
+- **No request could be made** (the command failed, or no event followed: GHES, Copilot review
+  disabled, out of premium requests) → Copilot does not run on this PR. The PR stays ready, and the
+  summary's first line under the heading says Copilot did not run and why, in the error's own words.
+
+### The Auto-fix session
+
+One session per PR. Two would push to the same branch and answer the same threads.
+
+1. **Reuse one that is still running.** Run
+   `python3 <this skill dir>/../../scripts/merge-gate.py --pr {pr_number}`. When `.autofix.session`
+   names a session, tell it about the new head:
+
+   ```bash
+   claude -p "/review-pr reviewed {head} and the PR is ready. Carry on watching it under the same rules." --cloud {session} --output-format json
+   ```
+
+   `"ok": true` → reuse it, and start nothing. `"ok": false` (archived, not found) → start one.
+2. **Start one** from this worktree. `claude --cloud` clones the remote at the current branch, and
+   a worktree under `.claude/worktrees/` inherits the main checkout's workspace trust. A folder that
+   was never trusted stops at Claude Code's trust prompt instead, and the command never returns.
+
+   Read [../../references/autofix-instructions.md](../../references/autofix-instructions.md), take
+   the text under its `## Prompt` heading, and fill in `{pr_url}`, `{pr_number}`, `{head_ref}`
+   (`{headRefName}`) and `{on_push}`. `{on_push}` is one of these two sentences, verbatim:
+
+   - "reviews every push to a ready PR, so each push you make brings the next Copilot pass"
+   - "does not review on push, so expect no Copilot pass after your first push; push once and do not
+     wait for another"
+
+   Then, with a two-minute timeout:
+
+   ```bash
+   script -q /dev/null claude --cloud "{filled prompt}" </dev/null
+   ```
+
+   `claude --cloud` refuses to run without a terminal, and `script` gives it a real one: the flag is
+   honoured, not bypassed, and a session id comes back that a local session could not produce. It
+   prints `Created cloud session: …` and a `View: https://claude.ai/code/session_…` line, then
+   returns. `{session}` is the `session_…` id on that line.
+
+   No id within the timeout, or an error → stop the command, and the session did not start. Name
+   the reason on the `Auto-fix:` line, in the command's own words: the account has no cloud
+   sessions, the organization's policy disables them, or the folder is not trusted. The PR stays
+   ready: the local reviews passed, and Copilot's own threads are still there for a person.
+
+Auto-fix also needs the Claude GitHub App on the repository, and that is the one requirement the
+attempt does not reveal: without the app, `claude --cloud` uploads the local repository instead of
+cloning it and still prints a session id, but the session receives no PR events. Its symptom is a
+Copilot pass with no reply. Where the summary cannot know, it does not claim: the `Auto-fix:` line
+says `started`, which is what was seen, never that the session is answering.
+
+## 8. Post the summary
 
 One comment, via `gh pr comment {pr_number} --body-file -` from a heredoc. Its shape is in
 `CONTRACTS.md`, under **The `/review-pr` summary comment**, because other skills and the tests read
 it. The heading's `Ready` or `Draft` and the `### Outcome` line are the state §6 read back, never
 the state it intended. The `Security:` line names the entry that ran, never one that was skipped or
-returned nothing.
+returned nothing. The `Copilot:` and `Auto-fix:` lines are what §7 read back: a request the timeline
+shows and a session id `claude --cloud` printed, never a step that was attempted. When Copilot did not
+run on a Ready PR, say so on the line under the heading, before anything else.
 
 Every blocking finding, from the code reviewer and the security reviewer alike, goes under
 `### Blocking findings` with its `path:line`, so the person picking up a Draft PR does not have to
@@ -260,7 +353,7 @@ success, which is how a summary disappears without an error.
 Post a new comment on every run; never edit an earlier one. Each summary records the head it
 reviewed, and the history of which commit passed and which did not is the point.
 
-## 8. Local summary
+## 9. Local summary
 
 ```
 /review-pr — {Ready | Draft}
@@ -274,8 +367,11 @@ Security: {vendor} ({model}) — {H} High, {M} Medium, {L} Low
           {with no list: "No Security reviewers list; /setup-workflow adds it."}
 Drift:    {N} advisory finding(s) | none
 Outcome:  {marked ready | left as a draft | returned to draft}
+Copilot:  {requested by the repository's ruleset | requested by /review-pr | did not run: {why} | not requested: Draft}
+Auto-fix: {session URL — started | session URL — already watching | not started: {why}}
 
-Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re-run /review-pr}
+Next: {Auto-fix is answering Copilot; when it posts "## Auto-fix — Clean", re-run /review-pr if it pushed, then /merge-pr |
+       Fix the blocking findings, push, and re-run /review-pr}
 ```
 
 ## Rules
@@ -284,6 +380,9 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - This is the only skill that marks a PR ready. A PR is marked ready only after a review of its
   current head that does not block.
 - Never `--approve`. This skill comments; the human pulls the merge trigger.
+- Copilot and Auto-fix only ever follow a PR read back as ready. Never request Copilot on a draft,
+  and never start a second Auto-fix session on a PR whose session is still running.
+- Never wait for Copilot or for the Auto-fix session. Start it, record it, finish.
 - The reviewers are always fresh-context agents or skills, never this session's own reading of the
   diff.
 - Absent sentinels stop the run. Nothing is posted, and a ready PR goes back to draft (§1).
@@ -299,7 +398,7 @@ Next: {Share the PR URL with reviewers | Fix the blocking findings, push, and re
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
   earlier summary passed.
-- A GitHub write that returns success is not evidence it took effect. §6 and §7 say what to read back, and §7 never claims a state §6 did not read back.
+- A GitHub write that returns success is not evidence it took effect. §6, §7 and §8 say what to read back, and §8 never claims a state §6 or §7 did not read back.
 - Read the Slice from the repository `closingIssuesReferences` names, with `--repo`.
 - Do not modify source files. Fixing what the review found is the session's next step, not this
   skill's.

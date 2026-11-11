@@ -45,9 +45,13 @@ else.
    deleting the branch.
 6. **Branch-deletion ordering trap** — deleting a base branch while a dependent PR still points
    at it can **close** that PR instead of retargeting it. Retarget dependents first.
-7. **Review policy once** — `/finalize-pr` posts `--comment` reviews and never `--approve`, so
+7. **An Auto-fix session may still be pushing.** `/review-pr` hands each ready PR to a cloud
+   Auto-fix session that pushes fixes for Copilot's comments. Its commits are reviewed by Copilot
+   alone, so a PR whose head is newer than its latest `/review-pr` summary is not mergeable, and a
+   session left running while this skill rebases a branch races the force-push.
+8. **Review policy once** — `/finalize-pr` posts `--comment` reviews and never `--approve`, so
    empty `reviewDecision` is the *expected, normal* state across the whole batch, not a blocker.
-8. **An explicit do-NOT-merge exclusion** (e.g. a CI regression-guard issue held until others land).
+9. **An explicit do-NOT-merge exclusion** (e.g. a CI regression-guard issue held until others land).
 
 ## Input
 
@@ -67,15 +71,24 @@ Optional flags:
 - Note the current branch as `{return_branch}` so §6 can put the checkout back.
 - Resolve the PR set (explicit list, or `--all-ready` via `gh pr list --state open --base {default} --json number --jq '.[].number'`). Drop the `--exclude` set.
 - For each PR, one call:
-  `gh pr view {n} --json number,title,url,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup,mergeStateStatus,mergeable,closingIssuesReferences`
-  plus `gh pr diff {n} --name-only` → its changed-file set.
+  `gh pr view {n} --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,reviewDecision,statusCheckRollup,mergeStateStatus,mergeable,closingIssuesReferences`
+  plus `gh pr diff {n} --name-only` → its changed-file set,
+  plus `python3 <this skill dir>/../../scripts/merge-gate.py --pr {n}` → its gate. Record
+  `{head[pr]}` = `headRefOid`, `{autofix[pr]}` = `.autofix.session`, and the `.reviewed` and
+  `.copilot` verdicts. `/merge-pr` §2b and §2c say what each value means. Exit 2 puts the PR on the
+  blocked list with the script's `✘` line: a gate that could not run has not passed.
 - Bucket:
   - `MERGED` → drop (no-op).
   - `CLOSED` or `isDraft=true` → **blocked list** (report, don't merge, don't abort the batch).
+  - `.reviewed.state` `stale` or `blocked` → **blocked list**, naming the commit the latest
+    summary reviewed: "run `/review-pr {n}` on the new head". Never offered as an override.
   - otherwise → **mergeable set**.
 - **Review policy, once:** if every PR in the mergeable set has empty/null `reviewDecision` →
   "No review policy configured — proceeding." If any is `CHANGES_REQUESTED`/`REVIEW_REQUIRED` →
   list them and ask: exclude those, or abort.
+- **Unreviewed and not-clean, once:** list every PR whose `.reviewed.state` is `none` (no
+  `/review-pr` summary) and every PR whose `.copilot.state` is not `clean`, with its reasons. Ask
+  once: exclude those, or proceed. As in `/merge-pr`, Copilot is a warning a human may approve over.
 - **Snapshot base tips.** `git fetch origin --prune`, then for each PR record
   `git rev-parse origin/{headRefName}` as `{tip[pr]}`. Concept 4's `--onto` rebase and §5's
   recovery both need a base's pre-merge tip *after* its branch is gone.
@@ -109,7 +122,7 @@ trigger (non-mechanical conflict, CI failure, unexpected PR state, a worktree ho
 /merge-stack — Plan ({N} PRs → {default})
 
 Order:
-  1. #69  feat/61…  base:main  CI:✓  review:none   worktree: issue-61 (done)      (independent)
+  1. #69  feat/61…  base:main  CI:✓  review:none  reviewed:a1b2c3d  copilot:clean  autofix:on   worktree: issue-61 (done)      (independent)
   2. #70  feat/62…  base:main  CI:✓  review:none   worktree: —                    (independent)
   …
   k. #74  feat/65…  base:#73   CI:?  review:none   worktree: issue-65 (working)   (STACKED on #73; overlaps #71 on SettingsPage.tsx)
@@ -118,6 +131,7 @@ Stacked:  #74 → #73
 Overlaps: #74 ↔ #71  (src/features/settings/SettingsPage.tsx — later one rebases)
 Blocked:  #80 (draft), #67 (excluded — CI regression guard)
 Sessions: 2 still running — they will be stopped before their PRs merge.
+Auto-fix: 4 watching — each is stopped before its PR is rebased or merged.
 
 Action: squash-merge each in order; retarget/rebase stacked PRs; stop sessions, remove worktrees, delete branches.
 Proceed? (one confirmation; then unattended)
@@ -131,8 +145,19 @@ but it can also mean someone is still pushing to it.
 
 For each PR in the order:
 
+0. **Stop its Auto-fix session**, if `{autofix[pr]}` is set, before anything touches the branch:
+
+   ```bash
+   claude -p "PR #{pr} is being merged by /merge-stack. Stop watching it, push nothing more, and end." --cloud {autofix[pr]} --output-format json
+   ```
+
+   `ok: false` for an archived or missing session means it had already stopped; note it and go on.
+   A session still running while step 3 rebases would push onto the branch mid-rebase, and either
+   its push or the force-push loses.
 1. **Re-fetch fresh state** — prior merges change things:
-   `gh pr view {pr} --json baseRefName,mergeStateStatus,mergeable,state`.
+   `gh pr view {pr} --json baseRefName,headRefOid,mergeStateStatus,mergeable,state`.
+   If `headRefOid` is no longer `{head[pr]}`, the Auto-fix session pushed between §1 and step 0:
+   **pause**. Those commits have not been reviewed; the PR needs `/review-pr` before it merges.
 2. **Retarget if its base has landed** — if the recorded base was another PR's branch that is
    now merged: `gh pr edit {pr} --base {default}`.
 3. **Bring up to date if `BEHIND`/`DIRTY`** — rebase with mechanical-only discipline (see
@@ -168,6 +193,9 @@ For each PR in the order:
    `border-gray-200`→`border-border`) the resolution is usually **keep both** — but treat it as a
    **pause point**: resolve deliberately per the overlap note, stage the specific files, run
    `lint` / `typecheck` / `format:check`, then `push --force-with-lease`.
+
+   A rebase this skill pushed sets `{head[pr]}` to the commit it pushed. Its changes are the
+   mechanical ones this step allows, made after the gate, so they do not reopen it.
 
    Truly semantic conflict you can't resolve mechanically → `rebase --abort`, **pause**, report.
 4. **Wait for CI** if step 3 pushed a new commit (the push re-fires checks): poll
@@ -206,7 +234,9 @@ For each PR in the order:
        path still on disk, so a worktree §4.5 had to keep keeps its records. A failure here is a
        warning, never a pause: the merge does not depend on it.
    - `git switch {default}` — never merge a branch that is currently checked out here.
-   - `gh pr merge {pr} --squash --delete-branch`
+   - `gh pr merge {pr} --squash --delete-branch --match-head-commit {head[pr]}`. GitHub refuses it if
+     the head moved since this skill last saw it, which is the guarantee that the commit merging is
+     the one that was reviewed or rebased here. A refusal → **pause** and report.
    - Verify: `gh pr view {pr} --json state --jq '.state'` == `MERGED`.
 6. Record: merged ✓, closing issues, branch deleted, worktree removed.
 
@@ -286,3 +316,5 @@ after all of them, per §7's procedure.
 - Never merge a branch that is currently checked out here — switch to `{default}` first.
 - One upfront confirmation (§3); then run unattended, pausing only on conflict / CI failure / unexpected PR state / a worktree holding work.
 - Respect the `--exclude` set; never merge it.
+- Never merge a PR whose head is newer than its latest `/review-pr` summary, and always pass
+  `--match-head-commit`. Stop a PR's Auto-fix session before rebasing or merging it.
