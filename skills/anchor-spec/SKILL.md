@@ -1,6 +1,6 @@
 ---
 name: anchor-spec
-description: Turn a published Spec issue into a persisted Spec file on the default branch — derive numbered Given/When/Then Criteria and a Verification from its user stories, confirm them with the founder, commit the file, and rewrite the issue body to a pointer, the Criteria list, and the Slices task list. Opens a pull request instead when the default branch rejects the push. Use when the user says "/anchor-spec", "anchor the spec", "persist this spec", or has just finished /to-spec.
+description: Turn a published Spec issue into a persisted Spec file on the default branch: derive numbered Given/When/Then Criteria and a Verification from its user stories, confirm them with the founder, commit the file, and rewrite the issue body to a pointer and the Criteria list. Opens a pull request instead when the default branch rejects the push. Use when the user says "/anchor-spec", "anchor the spec", "persist this spec", or has just finished /to-spec.
 ---
 
 # Anchor Spec
@@ -62,6 +62,18 @@ Then decide which source you are deriving from:
 On a re-anchoring, read the existing Criteria first and **never renumber them**. Their ids are
 already cited from Slices, test names, and review comments. A Criterion you drop leaves a gap; a
 Criterion you add takes the next id after the highest one ever used in that file.
+
+On a re-anchoring, also check the Spec's Slices before anything is written, because step 8 drops
+any `## Slices` task list the body still carries and the sub-issues have to hold every Slice first:
+
+```bash
+python3 <this skill dir>/../../scripts/spec-slices.py {number}
+```
+
+([spec-slices.py](../../scripts/spec-slices.py); `CONTRACTS.md` gives the rule.) Exit 1 → **stop**
+and print its `✘` lines as they are: each names a Slice that is not a sub-issue and the command
+that links it. Dropping the list with one of those unlinked would lose that Slice from every
+roster. Exit 2 → **stop**: the tracker could not be read. Exit 0 → carry on; step 8 drops the list.
 
 ## 3. Derive the Criteria
 
@@ -208,7 +220,7 @@ merge.
 
 ## 8. Rewrite the Spec issue body
 
-`gh issue edit {number} --body-file -` with exactly three things:
+`gh issue edit {number} --body-file -` with exactly two things:
 
 ```markdown
 Spec: `docs/specs/{number}-{slug}.md` on the default branch
@@ -217,20 +229,15 @@ Spec: `docs/specs/{number}-{slug}.md` on the default branch
 
 - C1 {one-line summary}
 - C2 [manual] {one-line summary}
-
-## Slices
-
-- [ ] #61
-- [ ] #62
 ```
 
 - The pointer is the **repo-relative path, not a link**. GitHub does not resolve relative links in
   an issue body, and a blob URL pins a branch and a host.
 - One line per Criterion: the id, the `[manual]` tag when it carries one, and a summary short enough
   to read in the issue. The full Given/When/Then stays in the file.
-- The Slices task list: carry over any `- [ ] #NN` list already in the body. On a first anchoring
-  there is none, because `/to-tickets` has not run yet — leave the heading with nothing under it.
-  That empty section is where `/to-tickets` writes.
+- **No `## Slices` section.** A Spec's Slices are the Spec issue's sub-issues, which `/to-tickets`
+  links. A list already in the body is dropped, never carried over; step 2 has already confirmed
+  every entry in it is a sub-issue.
 
 Rewrite the body on **both** paths out of step 7. When the Spec file is still sitting in a pull
 request, the pointer names where it is about to be rather than where it is, and that is the right
@@ -240,7 +247,8 @@ the pull request merges. The summary is what tells the founder to wait.
 **No prose survives.** Whatever narrative `/to-spec` published now lives in the file, and a second
 copy on GitHub is a second thing to drift.
 
-Labels, assignment, and closing references are untouched — this rewrites the body and nothing else.
+Labels, assignment, closing references and sub-issues are untouched. This rewrites the body and
+nothing else.
 
 ## 9. Print the summary
 

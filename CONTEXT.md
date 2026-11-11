@@ -9,7 +9,7 @@ The persisted document describing one feature's behaviour, from problem through 
 _Avoid_: PRD, plan, tracker issue
 
 **Spec issue**:
-The tracker issue that is a Spec's handle: it carries the labels, the assignment, and the closing references, and points at the Spec.
+The tracker issue that is a Spec's handle: it carries the labels, the assignment, and the closing references, points at the Spec, and holds the Spec's Slices as its sub-issues.
 _Avoid_: parent issue, PRD issue, tracker issue
 
 **Slice**:

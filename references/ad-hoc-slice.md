@@ -44,6 +44,10 @@ gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$
 sub-issues already change the code this Slice changes. No such Spec, or two equally, means no link,
 which is common.
 
+A link puts the Slice on the Spec's roster (`CONTRACTS.md`): the Spec is not closed out until it
+lands too, and `/dispatch-slices` dispatches it with the Spec's other Slices. It still owns none of
+the Spec's Criteria, because it has no `## Parent`.
+
 ## Duplicates and related work
 
 Search on two or three glossary terms with `gh issue list --state all --search "{terms}"`. An open

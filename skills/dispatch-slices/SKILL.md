@@ -136,8 +136,20 @@ later one replaced. Name it and let the human decide at §6.
 
 ## 3. Collect the Slice set
 
-With a Spec issue: `gh issue view {spec} --json number,title,body` and pull the Slice references
-from its `## Slices` task list (`- [ ] #NN` entries).
+With a Spec issue: its Slices are its sub-issues (`CONTRACTS.md`), read through one script that
+pages past GitHub's first page and checks nothing is missing from them:
+
+```bash
+python3 <this skill dir>/../../scripts/spec-slices.py {spec}
+```
+
+([spec-slices.py](../../scripts/spec-slices.py).) Exit 1 → **stop**, nothing dispatched, and print
+its `✘` lines as they are. Each names an issue that belongs to the Spec but is not a sub-issue of
+it: an entry on a `## Slices` task list from before sub-issues were the roster, or a Slice
+`/to-tickets` published without linking. Each line carries the command that links it; run them, then
+dispatch again. Exit 2 → **stop**: the tracker could not be read, which is not the same as a Spec
+with no Slices. Exit 0 → the roster is its `slices`, every state, in GitHub's order. Keep it: §4
+reads all of it. The open ones are the candidates here.
 
 Without: `gh issue list --state open --json number,title,labels,assignees --limit 30`.
 
@@ -177,11 +189,16 @@ play:
   Criterion in passing, and a `grep` over the whole body would read that mention as ownership —
   which is the one thing this gate exists to catch.
 
-**Read the citations from every Slice on the Spec issue's task list, not from the dispatchable set.**
-Open, closed, assigned, merged: a Criterion owned by a Slice that landed last week is owned, so
-`gh issue view` each entry on the task list rather than reusing what §3 returned. Reading only what
-§3 left would report every already-built Criterion as orphaned, and the second fan-out of a Spec
-would be the one that could never run.
+**Read the citations from every Slice on the Spec's roster, not from the dispatchable set.** Open,
+closed, assigned, merged: a Criterion owned by a Slice that landed last week is owned, so
+`gh issue view` each Slice in the roster §3 read from `spec-slices.py`, not just the ones §3's
+filters left. Reading only what the filters left would report every already-built Criterion as
+orphaned, and the second fan-out of a Spec would be the one that could never run. In discovery mode
+§3 read no roster, so run `spec-slices.py {spec}` here for each Spec in play, with §3's exits.
+
+**Skip a Slice whose `parent` is false.** It is a lone Slice linked under the Spec: its Criteria are
+numbered under its own issue, it owns none of the Spec's, and its own ids would otherwise read as
+citations the Spec does not have.
 
 Three gaps, all **stops**:
 
