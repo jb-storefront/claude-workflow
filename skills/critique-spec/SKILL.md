@@ -90,57 +90,17 @@ The point of this gate is that a different vendor's model doubts what a Claude s
 is why the Claude entry sits last: it is the floor that makes the gate work on a machine which has
 installed nothing, not the critic the gate wants.
 
-Take the entries in order. An entry runs only if it is **available**, and it counts only if it
-**produces findings**. Two questions, in that order, and both have to be answered before moving on.
+Walk the Critics list by the rules in
+[../../references/chain-walking.md](../../references/chain-walking.md): which entries are
+available, when an entry counts as having produced findings, where the walk ends, what to do when
+every entry fails, and which entry to name. Read it before dispatching anything.
 
-**The first entry that produces findings ends the walk.** Do not dispatch anything below it, do not
-run a second critic for comparison, and do not fall through to the Claude entry because an earlier
-entry's findings look thin. One Critique per run, from one entry, and the chain exists to find which
-entry that is — not to collect several opinions.
+What those rules leave to this skill:
 
-**Available.** What each vendor needs before it is worth dispatching:
-
-| Vendor | Available when all of these hold |
-| --- | --- |
-| `codex` | `command -v codex` finds the CLI, and `codex:codex-rescue` appears in this session's available agent types |
-| `google` | `command -v agy` finds the CLI, `antigravity:agy-rescue` appears in this session's available agent types, and the entry's model id appears in `agy models` |
-| `claude` | always — it is the session you are already in |
-
-Check every part. A plugin without its CLI dispatches an agent that cannot reach a model, and a CLI
-without its plugin leaves nothing to dispatch.
-
-**The `agy models` check is not optional for a `google` entry.** Run it and match the entry's model
-against the ids in the first column:
-
-```bash
-agy models
-```
-
-It prints one tab-separated `{id}\t{display label}` per line under a `Fetching available models...`
-header. Match on the id, which is what `--model` takes. An id that is absent — misspelled, or not
-offered on this account's tier — makes the entry unavailable: **say the id is unavailable, do not
-dispatch agy, and move to the next entry.** Which ids exist depends on the account, so this has to
-be read live and never from a list baked into this skill. `agy models` on a signed-out account
-cannot answer, which is the same answer: unavailable, move on.
-
-**Produces findings.** Availability is not usability. A CLI can be installed and logged out, and
-both of these CLIs sit in exactly that state on a fresh machine. An unauthenticated headless
-`agy --print` exits 0 having written nothing, a failure the antigravity plugin documents; a
-dispatched agent can also return an error, a re-auth instruction, or an empty report. None of those
-is a Critique.
-
-So when a dispatched entry returns nothing usable — no findings under the seven headings, an empty
-report, or the agent's own message that it could not reach a model — **say which entry returned
-nothing and move to the next entry.** Falling through on a silent failure, and not only on absent
-tooling, is what makes the Claude floor reachable in the case it exists for.
-
-**When every entry has been tried and none produced findings, stop.** Report that no critic produced
-a Critique, name what each entry did, and write no Critique line and no comment. A Spec left at
-`draft` is a gate that held; a Critique line naming a critic that produced nothing is a gate that
-lied.
-
-Whichever entry runs, **hold on to which one it was**. The Critique line names it, and a line naming
-a critic that did not run is worse than no line.
+- **Findings** are findings under the seven headings of step 4's prompt. An entry that returns
+  anything else has produced nothing, and the walk moves on.
+- **The entry that ran** is the critic the Critique line names in step 8.
+- **When every entry fails**, write no Critique line and no comment, and leave the Spec at `draft`.
 
 ## 4. Write the prompt
 
@@ -209,7 +169,7 @@ do not pass --add-dir and do not write any file.
 `agy-rescue` is a thin forwarding wrapper around `agy --print`, the same role `codex-rescue` plays
 for Codex. It omits `--model` unless the caller asks for one, so the entry's model has to be named
 here or the Critique line would record a model that was never passed. Step 3 has already confirmed
-the id against `agy models`, which is what makes naming it safe.
+the id is offered on this account, which is what makes naming it safe.
 
 **`claude`.** The step 4 prompt, `model` set to the entry's model, and a read-only `subagent_type`:
 prefer a read-only agent type the project offers (`Explore` is one); otherwise `general-purpose`,
@@ -340,16 +300,14 @@ written down, and the next reader of this Spec deserves to know what was doubted
 - The file is the Spec. When it and the Spec issue body disagree, the file is right.
 - Never write the findings yourself, and never let the critic write the Spec. The critic doubts, the
   founder resolves, this skill edits.
-- Never claim a critic that did not run. The Critique line names the entry that produced the
-  findings, never an earlier one that was skipped or returned nothing.
-- An entry that is absent, that cannot be run as configured, or that returns nothing usable is
-  skipped, not fatal. The chain is only exhausted when its last entry has been tried.
+- The Critics chain is walked by
+  [../../references/chain-walking.md](../../references/chain-walking.md). The Critique line names
+  the entry that ran, never one that was skipped or returned nothing.
 - When no entry produces findings, write no Critique line and no comment, and leave the Spec at
   `draft`.
 - Never renumber a Criterion.
 - The last entry of the Critics list must name `claude`. Without a floor the chain can run out,
   and a gate that can run out is not a gate.
-- Never dispatch a `google` entry whose model id `agy models` does not list.
 - Nothing from `docs/agents/workflow.md` enters the session's context beyond the entries this skill
   walks.
 - The Status change is only real once it is on the remote default branch.
