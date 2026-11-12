@@ -1,15 +1,15 @@
 # Slice workflow
 
-The vocabulary of the spec-to-merge loop this plugin runs: one persisted spec per feature, cut into slices that parallel sessions build in their own worktrees and land as reviewed PRs.
+The vocabulary of the spec-to-merge loop this plugin runs: one spec per feature, kept in its tracker issue, cut into slices that parallel sessions build in their own worktrees and land as reviewed PRs.
 
 ## Language
 
 **Spec**:
-The persisted document describing one feature's behaviour, from problem through criteria to how the whole thing is verified.
+The document describing one feature's behaviour, from problem through criteria to how the whole thing is verified. It is the body of its Spec issue, and stays true to the code after the feature ships.
 _Avoid_: PRD, plan, tracker issue
 
 **Spec issue**:
-The tracker issue that is a Spec's handle: it carries the labels, the assignment, and the closing references, points at the Spec, and holds the Spec's Slices as its sub-issues.
+The tracker issue whose body is the Spec: it carries the labels, the assignment, and the closing references, and holds the Spec's Slices as its sub-issues.
 _Avoid_: parent issue, PRD issue, tracker issue
 
 **Slice**:

@@ -4,7 +4,7 @@ The shape of every artifact the slice workflow reads and writes, written down on
 
 A skill is free to change how it works. What it may not change unilaterally is the shape of what it
 leaves behind, because another skill reads it. This document is that boundary. Read it to hand-write
-a Spec file, a Spec issue body, or a Slice body that every skill in the plugin accepts, without
+a Spec or a Slice body that every skill in the plugin accepts, without
 reading a single skill first.
 
 It describes shapes, not skill behaviour. When you want to know what `/critique-spec` does, read
@@ -32,29 +32,41 @@ in the world. Four such strings appear below and are deliberate:
 A term this document introduces that is not in `CONTEXT.md` and not one of the above is a bug in one
 of the two files.
 
-## The Spec file
+## The Spec
 
-### Location
+### Where it lives
 
+The Spec is the body of its Spec issue. There is no Spec file: nothing about a Spec is committed to
+the repository, and changing one is an issue edit, never a pull request. ADR 0002 records why, and
+what it replaced.
+
+The Spec issue therefore carries everything at once: the Spec in its body, the labels, the
+assignment and the closing references on the issue, and the Slices as its sub-issues. It stays
+readable and editable after it closes, which is what keeps an `implemented` Spec anchored to the
+code it describes.
+
+**Every read and every header write goes through one script**, so the grammar below and the Status
+transitions are enforced in one tested place:
+
+```bash
+python3 scripts/spec.py read 60                      # Status, Criteria, Verification, as JSON
+python3 scripts/spec.py set-status 60 in-progress    # one transition, read back
+python3 scripts/spec.py header 60 landed "#61, #62, 2026-09-24"
+python3 scripts/spec.py list --status implemented    # every Spec at that Status, open or closed
 ```
-docs/specs/{spec-issue-number}-{slug}.md
-```
 
-One file per Spec, on the default branch. The number is the Spec issue's; the slug is a lowercased,
-hyphenated cut of its title. ADR 0001 records why the file lives in the repo and the Spec issue is
-only its handle: every Slice worktree is cut from the remote default branch, so a committed file is
-the only thing every parallel session can read.
+Each takes `--repo {owner}/{name}` for a Spec tracked in another repository. It exits 1 on a body
+that is not a Spec, a refused transition, or a write that did not read back, and 2 when `gh` fails.
 
-**The file wins on conflict.** If the Spec issue body and the file disagree, the file is right and
-the body is stale.
+A skill rewriting the prose or the Criteria, which only `/critique-spec` does,
+reads the body immediately before editing it and writes it back with
+`gh issue edit {n} --body-file -`. GitHub keeps every earlier version of a body in the issue's edit
+history, which is the Spec's history.
 
 ### Shape
 
 ```markdown
-# {Spec title}
-
 **Status:** draft
-**Tracker:** #60
 
 ## Problem Statement
 ## Solution
@@ -88,8 +100,12 @@ Command: `uv run python scripts/dry_run.py --target sandbox migrations/ledger.sq
 Command: `pnpm test:e2e loyalty`
 ```
 
-The first seven sections are `/to-spec`'s output, carried over unchanged. `## Criteria` and
-`## Verification` are added by `/anchor-spec`.
+The issue's title is the Spec's title. The seven middle sections are `/to-spec`'s output, left where
+it published them. `/critique-spec` adds the header line above them and `## Criteria` and
+`## Verification` below them, and changes nothing else `/to-spec` wrote.
+
+The header is the lines above the first `## ` heading. A `**Status:**` line anywhere else is prose,
+not a Status, and a body with no `**Status:**` line in its header is not a Spec.
 
 ### Verification takes one of two forms
 
@@ -104,10 +120,11 @@ Command form is preferred wherever the feature can be proven that way.
 
 ### Lines that appear as the Spec moves
 
-`**Status:**` and `**Tracker:**` are present from the first commit. Two more are appended in place,
-each exactly one line:
+`**Status:**` is present from the first write. Two more join the header, each exactly one line, always in
+the order Status, Critique, Landed, and each replacing its earlier self rather than repeating:
 
 ```markdown
+**Status:** implemented
 **Critique:** google (gemini-3.8-flash-high), #60 comment 2847193044, 2026-09-18
 **Landed:** #61, #62, #63, 2026-09-24
 ```
@@ -128,56 +145,55 @@ behaviour and name Seams.
 
 The one exception is a runnable command: the Verification's `Command:` line, and the `Command:` line
 of a `[command]` Criterion. A path inside a command does not rot silently. The first run after the
-refactor fails, and says which path. `/review-pr` finds the Specs a diff touches by matching Spec slugs and
-`CONTEXT.md` terms against changed paths, which is why it needs no paths written down.
+refactor fails, and says which path. `/review-pr` finds the Specs a diff touches by matching Spec
+titles and `CONTEXT.md` terms against changed paths, which is why it needs no paths written down.
+
+### Keeping an implemented Spec true
+
+An `implemented` Spec describes code that ships, and stays that way. When `/review-pr` reports
+spec drift, a diff changed behaviour an implemented Spec describes. The resolution is one of two,
+and both are a person's call:
+
+- **The change is intended.** Edit the Spec issue so it describes the new behaviour. Criterion ids
+  are never renumbered: a Criterion the change retires is removed and leaves a gap, and one it
+  adds takes the next unused id.
+- **The change is not.** It is a bug in the diff.
+
+Either way the fix to the Spec is an issue edit, never a commit, so it can be made the moment the
+drift is found, and a drift finding never makes a pull request wait on a second pull request.
+
+### A Spec anchored to a file under the old contract
+
+A Spec issue whose body is a ``Spec: `docs/specs/…` `` pointer was anchored when the Spec lived in
+a committed file. `spec.py` exits 1 on it and prints the fix, `spec.py migrate {n}`, which copies the
+file's content into the issue body, keeping its Status and history, and leaves the file for the
+founder to delete. No reader
+falls back to the file.
 
 ## Status, and who writes each value
 
-Five values. One skill owns each transition, so a reader always knows whether the file describes the
-code or an intention.
+Five values. One skill owns each transition, so a reader always knows whether the Spec describes the
+code or an intention. `spec.py set-status` refuses any transition this table does not give, and
+walking a Status backwards with it.
 
 | Status | Meaning | Written by | When |
 | --- | --- | --- | --- |
-| `draft` | Synthesised, nobody has doubted it | `/anchor-spec` | On the first commit of the file |
+| `draft` | Anchored, nobody has doubted it | `/critique-spec` | When it writes the Criteria and every critic failed |
 | `critiqued` | A second model doubted it and the findings are resolved | `/critique-spec` | After the grilling round is applied |
 | `in-progress` | At least one Slice is being built | `/dispatch-slices` | At the first fan-out |
 | `implemented` | Every Slice landed and the Verification ran | `/merge-stack`, or `/merge-pr` for a single Slice | When the last Slice merges |
 | `superseded` | A later Spec replaced it | by hand | Never automatically |
 
-`/anchor-spec --skip-critique "<reason>"` is the one path that reaches `critiqued` without
-`/critique-spec`, and it writes the reason into the Critique line.
+`/critique-spec` writes the Spec at `draft` and moves it to `critiqued` in the same run, so `draft`
+persists only when no critic could run. `/critique-spec --skip-critique "<reason>"` is the one path
+to `critiqued` without a critic, and it writes the reason into the Critique line. A person redoing a Critique sets
+`critiqued` back to `draft`, the only backward step `spec.py` takes.
 
 `/dispatch-slices` refuses to fan out a Spec still at `draft`.
 
-## The Spec issue body after anchoring
-
-`/anchor-spec` rewrites the body it found to two things and nothing else:
-
-```markdown
-Spec: `docs/specs/60-loyalty-earn-and-burn.md` on the default branch
-
-## Criteria
-
-- C1 Loyalty ledger holds one credit row per earn-eligible line
-- C2 [manual] Rewards balance renders in the cart summary
-- C3 Unregistered client_id is rejected 401 within 200 ms
-- C4 [command] Sandbox dry run accepts the ledger migration
-```
-
-The pointer is the repo-relative path, not a link: GitHub does not resolve relative links inside an
-issue body, and a hardcoded blob URL pins a branch and a host.
-
-**No prose.** The pointer and the Criteria list with ids and tags. Whatever narrative `/to-spec`
-published is now in the file, and a second copy on GitHub is a second thing to drift.
-
-**No Slices.** The body carries no `## Slices` section. A Spec's Slices are its sub-issues, below.
-
-The Criteria list is one line per Criterion: the id, its `[manual]` or `[command]` tag when present,
-and a summary short enough to read in the issue. The full Given/When/Then, and a `[command]`
-Criterion's command, live in the file.
-
-The body stays a body: labels, assignment, and closing references keep working exactly as they did
-before any of this.
+The Status is a gate that anyone with write access to the tracker can open by editing the issue.
+So was the file it replaced, for anyone with push access; a gate that holds against a teammate was
+never the point. What the Status guarantees is that every skill reads and writes it the same way.
 
 ## A Spec's Slices are its sub-issues
 
@@ -211,8 +227,8 @@ holds the Spec open like any other Slice and owns none of its Criteria.
 
 The script names every such issue in one run, each with the `gh api` command that links it. Once
 they are linked, the reader runs again. A `## Slices` list whose every entry is already a sub-issue
-is not read, and the script notes once that `/anchor-spec` drops it on its next run. An empty
-`## Slices` heading, which `/anchor-spec` used to leave, is ignored.
+is not read, and the script notes once that it can be deleted from the body. An empty
+`## Slices` heading is ignored.
 
 ## The Slice body
 
@@ -282,7 +298,7 @@ same gate:
 - [ ] #74 C2 [command] The webhook schema passes the vendor check. Command: `pnpm vendor:check webhooks`
 ```
 
-A lone Slice has no Spec file to hold a `[command]` Criterion's command, so the checkbox carries it,
+A lone Slice has no Spec to hold a `[command]` Criterion's command, so the checkbox carries it,
 after the summary, as `Command:` and one backticked command.
 
 Same grammar, same states in the review comment, same block on anything unverified. Skipping the
@@ -299,7 +315,7 @@ Two forms:
 
 | Form | Where |
 | --- | --- |
-| `C1` | Inside its own Spec file |
+| `C1` | Inside its own Spec |
 | `#60 C1` | Cited from a Slice body, carried in a test name, or named in a review comment |
 | `gr4vy/gr4ce#21 C4` | The same, where the Slice lives in a different repository than the pull request |
 
@@ -357,8 +373,8 @@ written.
 
 ### The `[manual]` tag
 
-A Criterion a person must check carries `[manual]` immediately after its id, in the Spec file, in
-the Spec issue body, and in the Slice that cites it:
+A Criterion a person must check carries `[manual]` immediately after its id, in the Spec and in the
+Slice that cites it:
 
 ```
 ### C2 [manual]
@@ -394,9 +410,8 @@ absent, is the wrong command.
 
 | Where | What it carries |
 | --- | --- |
-| The Spec file | `### C4 [command]`, and the `Command:` line as the Criterion's last line |
-| The Spec issue body | `- C4 [command] {summary}`. The command stays in the file |
-| A Slice citing the Spec | `- [ ] #60 C4 [command] {summary}`. The command is read from the file |
+| The Spec | `### C4 [command]`, and the `Command:` line as the Criterion's last line |
+| A Slice citing the Spec | `- [ ] #60 C4 [command] {summary}`. The command is read from the Spec |
 | A lone Slice | ``- [ ] #74 C2 [command] {summary}. Command: `{command}` `` |
 
 The rules:
@@ -616,7 +631,7 @@ than repaired:
 | Found | Reported as |
 | --- | --- |
 | A Slice whose checkboxes carry no ids | `ⓘ Ids: the Slice's Criteria carry no ids, so no test can be matched to one` |
-| A checkbox tag that disagrees with the Spec file | `ⓘ Tag: #60 C4 is [command] in the Spec file and [manual] on #62. The file wins; fix #62` |
+| A checkbox tag that disagrees with the Spec | `ⓘ Tag: #60 C4 is [command] in the Spec and [manual] on #62. The Spec wins; fix #62` |
 | A `[command]` Criterion with no `Command:` line | `unverified`, with `no command named` as its evidence |
 | A `[manual]` Criterion whose check is a command | `ⓘ Tag: #60 C2 is [manual] and its check is a command a session can run. Retag it [command]`. It is still reported `manual` |
 
@@ -651,7 +666,7 @@ Auto-fix: {[session_…](https://claude.ai/code/session_…) — {started | alre
 - (or "None.")
 
 ### Spec drift (advisory)
-- `docs/specs/60-loyalty-earn-and-burn.md`, {behaviour the diff changes}, `path:line`
+- #60 Loyalty earn and burn, {behaviour the diff changes}, `path:line`
 - (or "None." / "No implemented Specs match the changed paths.")
 
 ### Outcome
@@ -770,7 +785,7 @@ Whether this repository keeps Specs at all. Two values:
 
 | Value | Meaning |
 | --- | --- |
-| `on` | The Spec half of the workflow runs: `/dispatch-slices` reads each Spec file, gates on its Status and checks that every Criterion is owned |
+| `on` | The Spec half of the workflow runs: `/dispatch-slices` reads each Spec, gates on its Status and checks that every Criterion is owned |
 | `off` | The repository keeps no Specs. Every Slice is a lone Slice, whatever its `## Parent` says |
 
 **Absent means `on`.** A file written before this line existed, or a repository that never edited
@@ -779,7 +794,7 @@ it, keeps today's behaviour without touching the file.
 `off` is a declaration about the repository, not about one run: it is true every time, and it lives
 in a file a reviewer sees in a diff. Under it, every skill that reads `## Parent` reads it as absent.
 `/dispatch-slices` runs no Status gate, no coverage check, writes no Status, and warns about no
-missing Spec file; it names the declaration once in its confirmation instead. `/acceptance-tests`
+Spec issue that is not a Spec; it names the declaration once in its confirmation instead. `/acceptance-tests`
 and `/finalize-pr` number and report the Slice's own Criteria exactly as they do for a lone Slice,
 under the same four states. Skipping the Spec is not a way to skip the tests.
 

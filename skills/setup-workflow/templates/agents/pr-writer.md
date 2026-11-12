@@ -25,7 +25,9 @@ rule" where a generic one writes "updates the service"._
 1. `gh pr view {n} --json title,body,headRefName,closingIssuesReferences` and `gh pr diff {n}`.
 2. The Slice issue in `closingIssuesReferences`: its `## What to build` and its
    `## Acceptance criteria`, which cite the Criteria this Slice owns as `#60 C1`.
-3. The Spec file the Slice's `## Parent` points at, under `docs/specs/`, for the Criteria in full.
+3. The Spec issue the Slice's `## Parent` names, for the Criteria in full:
+   `gh issue view {spec} --repo {owner}/{repo}`, in the repository that holds the Slice. Its body
+   is the Spec.
 4. `CONTEXT.md` and any ADR under `docs/adr/` that the diff touches.
 
 ## What to write

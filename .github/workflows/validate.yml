@@ -2,8 +2,8 @@ name: Validate
 
 on:
   pull_request:
-  # /anchor-spec commits Specs straight to the default branch, so a pull
-  # request gate alone would leave a path to main that nothing validates.
+  # A direct push to the default branch bypasses the pull request gate, so
+  # validate it too rather than trust that nobody pushes there.
   push:
     branches: [main]
 

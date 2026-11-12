@@ -8,7 +8,7 @@ CI. validate.sh does not call it, because it needs a PR to look at.
 
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C1 448
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C3 449 --finding src/x.py
-    test-review-pr-behaviour.py --repo gr4vy/gr4ce C5 451 --finding docs/specs/9-x.md
+    test-review-pr-behaviour.py --repo gr4vy/gr4ce C5 451 --finding '#9'
     test-review-pr-behaviour.py --repo owner/repo S1 70 --finding "claude (opus)"
     test-review-pr-behaviour.py --repo owner/repo S2 70 --finding scripts/planted.py
 
@@ -163,8 +163,9 @@ def check_54_c5(pr, spec):
     if drift is None:
         return False, "the summary has no spec drift section"
     if not spec:
-        return False, "pass --finding with the Spec file the drift should name"
-    if spec not in drift:
+        return False, "pass --finding with the Spec issue the drift should name, as #9"
+    # A bare substring check would let #9 pass on a summary that names #90.
+    if not re.search(re.escape(spec) + r"(?!\d)", drift):
         return False, f"spec drift does not name {spec}: {drift!r}"
     return True, f"drift names {spec}"
 

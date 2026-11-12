@@ -1,6 +1,6 @@
 ---
 name: critique-spec
-description: Send a drafted Spec to a second model for doubt, post its findings on the Spec issue, resolve each one with the founder, and set the Spec's Status to critiqued. Use when the user says "/critique-spec <issue>", "critique the spec", "get a second opinion on the spec", or has just finished /anchor-spec and before /dispatch-slices.
+description: Turn a Spec issue /to-spec published into a critiqued Spec. Derive numbered Given/When/Then Criteria and a Verification from its user stories, send the whole Spec to a second model for doubt, settle the Criteria and every finding with the founder in one round, and write the result into the issue body at Status critiqued. Use when the user says "/critique-spec <issue>", "critique the spec", "add criteria to the spec", "get a second opinion on the spec", or has just finished /to-spec and before /to-tickets.
 ---
 
 # Critique Spec
@@ -10,49 +10,151 @@ the failure mode is not a wrong Spec but a plausible one: an ambiguity every rea
 differently, an edge case nobody raised, a decision an agent will make silently in three parallel
 worktrees and make three different ways.
 
-This skill is the gate between a drafted Spec and any Slice being built. A different vendor's model
-reads the Spec and reports doubts, the founder resolves every one of them, and the Spec file moves
-from `draft` to `critiqued`. `/dispatch-slices` refuses to fan out a Spec still at `draft`, so until
-this runs, or `/anchor-spec --skip-critique "<reason>"` recorded a reason for not running it, no
-Slice starts.
+This skill turns what `/to-spec` published into a Spec the rest of the loop can build from. It
+derives the Criteria and the Verification, a different vendor's model doubts the whole thing, and
+the founder settles the Criteria and every doubt in one sitting. Only then is anything written: the
+Status line, `## Criteria` and `## Verification` go into the Spec issue's body at `critiqued`.
 
-Read `CONTRACTS.md` at the repo root before hand-checking anything here: the Spec file's shape, the
+It is the step between `/to-spec` and `/to-tickets` in the
+`/to-spec` → **`/critique-spec`** → `/to-tickets` → `/dispatch-slices` loop. `/dispatch-slices`
+refuses a Spec that is not anchored, or still at `draft`, so until this runs, or runs with
+`--skip-critique "<reason>"`, no Slice starts.
+
+The critic sees the Criteria before the founder confirms them, on purpose. Confirming Criteria and
+then reopening them for a critic's doubts is two passes over the same decisions; one pass with both
+in front of the founder is cheaper and settles more.
+
+Nothing here forks Pocock's `/to-spec`. This skill runs after it and reads what it published.
+
+Read `CONTRACTS.md` at the repo root before hand-checking anything here: the Spec's shape, the
 Status table, the Critique line, and the per-repo workflow file are all defined there, and this
 skill only writes what that document says.
 
 ## Input
 
-`$ARGUMENTS`: a Spec issue number (`60` or `#60`). If it is missing or not a number, run
+`$ARGUMENTS`: a Spec issue number (`60` or `#60`), optionally followed by
+`--skip-critique "<reason>"`. If the number is missing or not a number, run
 `gh issue list --state open --limit 10` and ask which Spec to critique.
 
-## 1. Find the Spec file and check it is critiquable
+`--skip-critique "<reason>"` derives and confirms the Criteria exactly as a full run does, and
+skips the critic: steps 5 to 7 do not run, and the Spec is written at `critiqued` with the reason in
+its Critique line, so the skip is auditable. It is for a change too small to be worth doubting, such
+as a two-Criterion bug fix. A reason is required; `--skip-critique` with no reason is an error, not
+an empty reason.
 
-The Spec file is `docs/specs/{number}-{slug}.md`; the slug is not knowable from the issue number
-alone, so glob for it:
+## 1. Read the Spec issue and decide which run this is
 
 ```bash
-ls docs/specs/{number}-*.md
+python3 <this skill dir>/../../scripts/spec.py read {number}
 ```
 
-**Stop and say why** when any of these hold. Each is a reason the run cannot produce a valid
-Critique, and each names the fix:
+([spec.py](../../scripts/spec.py).) Every read of a Spec goes through it. What it returns decides
+the run:
 
-| Condition | What to say |
+| What `spec.py read` returns | What to do |
 | --- | --- |
-| No file matches | The Spec is not anchored. Run `/anchor-spec {number}` first. |
-| More than one matches | Two files claim the same Spec issue. Name both and ask which is the Spec. |
-| No `**Status:**` line | The file is not a Spec in the shape `CONTRACTS.md` describes. |
-| Status is `critiqued` | Already critiqued. Name the existing Critique line. To redo it, set the Status back to `draft` by hand. |
-| Status is `in-progress`, `implemented` or `superseded` | Slices are already building from it, or it is history. Critiquing now would change a Spec that Slices are citing. |
+| Exit 1, the issue carries no `**Status:**` line | **First run.** The body is `/to-spec`'s prose. Read it with `gh issue view {number} --json title,body,state` and go on to step 2 |
+| `status` is `draft` | **Re-run.** The Spec already carries Criteria, from a run whose critics all failed. Skip steps 2 to 4 and critique the Spec as it stands |
+| `status` is `critiqued` | **Stop.** Already critiqued; name the Critique line. To redo it, run `spec.py set-status {number} draft` first |
+| `status` is `in-progress`, `implemented` or `superseded` | **Stop.** Slices are building from it, or it is history. Critiquing now would change a Spec that Slices are citing |
+| Exit 1, the `✘` line names a Spec anchored to a file | **Stop** and print the `✘` line: it carries the `spec.py migrate` command that brings the Spec back into its issue |
+| Exit 1, any other `✘` line | **Stop** and print it. The body has a Status line but does not parse; fix the issue by hand |
+| Exit 2 | **Stop.** `gh` could not read the issue; report its error |
 
-Only `draft` proceeds. The check is on the file, never the Spec issue body: the file wins on
-conflict.
+A first run on a closed issue stops too: `/to-spec` publishes open issues, and a closed one is
+either finished or abandoned.
 
-Be on the default branch with a clean tree before writing anything, because step 8 commits there.
-`git status --porcelain` non-empty → stop and say so rather than committing someone else's work
-alongside the Spec edit.
+`--skip-critique` on a re-run applies the same skip to the Spec as it stands: go to step 9.
 
-## 2. Read the Critics list from the per-repo workflow file
+## 2. Derive the Criteria
+
+Read `## User Stories` for the behaviour, and the rest of the Spec for the numbers that make a Then
+measurable — `## Implementation Decisions` and `## Testing Decisions` are where the thresholds,
+error codes, and limits usually are.
+
+The grammar is `CONTRACTS.md`'s, and these are the parts that go wrong most:
+
+- **Given/When/Then by default**, three clauses, one per line. **EARS** —
+  `WHEN <trigger> THE SYSTEM SHALL <behaviour>`, one line — for a constraint that holds always and
+  would need a fictional Given: a latency, a limit, a status code.
+- **Every Then resolves to pass or fail.** "Fast", "gracefully", "correct", "properly",
+  "reasonable", "appropriate" each mark a Then not yet written. Replace it with the number, the
+  status code, or the literal string a reader can check. An EARS `SHALL` clause is held to exactly
+  the same bar — the form changes, the measurability requirement does not.
+- **`[manual]` immediately after the id** on any Criterion a human must check. This tag is the only
+  thing that later decides a Slice needs a person, so a Criterion whose check you cannot imagine
+  automating gets tagged now. It is tagged because automating it is not worth it, not because it is
+  hard to write.
+- **`[command]` immediately after the id** on a Criterion proven by running a command rather than by
+  a test: a sandbox dry run, a vendor or schema check. Close it with a `Command:` line naming the
+  exact command, runnable from the repository root, read-only, and exiting 0 exactly when the Then
+  holds. Never `[manual]` for a check a session can run, even one needing a credential some
+  sessions lack: `CONTRACTS.md` has why. Not for lint, typecheck, format or the test suite, which
+  `/finalize-pr` already runs on every pull request. Ask the founder for the command when the Spec
+  does not give it; a guessed command is a Criterion nobody can prove.
+- **At most one tag** per Criterion.
+- **Ids are `C1`, `C2`, `C3`** in order.
+
+Stories do not map one-to-one onto Criteria. Collapse two stories that describe the same observable
+behaviour into one Criterion; split a story that promises two separately checkable things into two;
+write none for a story that is pure rationale with nothing to observe.
+
+**Name no file paths.** Not in a Criterion, not anywhere you write. A path is a promise about
+structure that the next refactor breaks silently. Name behaviour, and name the Seam. A `Command:`
+line is the one exception, as it is for the Verification: a command that rots fails loudly.
+
+## 3. Propose the Verification
+
+The Verification proves the **whole feature** after the last Slice lands, which is what makes it
+different from a Criterion. Exactly one form, never both:
+
+- **`Command:`** followed by a single runnable command, to be run on a fresh checkout of the default
+  branch after the last Slice merges. Preferred wherever the feature can be proven this way.
+- **`Walkthrough:`** followed by numbered steps a person performs, printed as the last thing the
+  founder is asked to do.
+
+Prefer command form. Reach for a walkthrough when what the feature changes is something only a
+person can see.
+
+## 4. Compose the Spec, and write nothing yet
+
+The proposed Spec is the issue body as it stands, with three additions and nothing else changed:
+
+```markdown
+**Status:** draft
+
+{the body /to-spec published, byte for byte}
+
+## Criteria
+
+### C1
+Given ...
+When ...
+Then ...
+
+### C2 [manual]
+Given ...
+When ...
+Then ...
+
+### C3 [command]
+WHEN ... THE SYSTEM SHALL ...
+Command: `{the exact command}`
+
+## Verification
+
+Command: `{command}`
+```
+
+- **Add, never rewrite.** `/to-spec`'s sections are the founder's prose and stay as they are. A file
+  path in them is raised in step 8, not silently removed.
+- **No `# title` line.** The issue's title is the Spec's title.
+- `## Criteria` and `## Verification` go last, with every clause and every `Command:` line in full.
+
+Hold it in a temporary file. It is what the critic doubts in step 6 and what step 9 writes once the
+founder has settled it. Nothing reaches the issue before step 8 is answered.
+
+## 5. Read the Critics list from the per-repo workflow file
 
 `docs/agents/workflow.md` holds the ordered list this skill reads, and a `**Specs:**` line it does
 not; `CONTRACTS.md` describes both. Read the list, ignore the rest:
@@ -84,7 +186,7 @@ A file in the superseded two-line shape, `**Critic:**` and `**Fallback:**`, is r
 chain it encodes, in that order. Say once that the file is in the old shape and that
 `/setup-workflow` rewrites it. `CONTRACTS.md` documents only the list.
 
-## 3. Walk the chain and pick the critic that runs
+## 6. Walk the chain, and dispatch the critic that runs
 
 The point of this gate is that a different vendor's model doubts what a Claude session wrote. That
 is why the Claude entry sits last: it is the floor that makes the gate work on a machine which has
@@ -97,24 +199,38 @@ every entry fails, and which entry to name. Read it before dispatching anything.
 
 What those rules leave to this skill:
 
-- **Findings** are findings under the seven headings of step 4's prompt. An entry that returns
+- **Findings** are findings under the seven headings of step 6's prompt. An entry that returns
   anything else has produced nothing, and the walk moves on.
-- **The entry that ran** is the critic the Critique line names in step 8.
-- **When every entry fails**, write no Critique line and no comment, and leave the Spec at `draft`.
+- **The entry that ran** is the critic the Critique line names in step 9.
+- **When every entry fails**, post no comment and write no Critique line. Step 8 still runs on the
+  Criteria alone, and step 9 writes the Spec at `draft`.
 
-## 4. Write the prompt
+### The prompt
 
 One prompt, used verbatim by whichever entry of the chain runs, so the paths are comparable and a
-Critique reads the same whoever produced it. Fill in the paths and the Spec title; change nothing
-else.
+Critique reads the same whoever produced it. Fill in the Spec's title, its body, and the ADR paths;
+change nothing else.
+
+The Spec goes into the prompt itself, not as a path or a `gh` command for the critic to run. The
+`codex` and `google` wrappers run another vendor's CLI, which may have no `gh` auth and may be
+sandboxed to the working directory, so neither a `gh` call nor a file in this session's scratchpad
+is something every critic can be relied on to read. Text in the prompt reaches all three the same
+way. The body the critic gets is the one step 4 composed: `/to-spec`'s sections with the proposed
+`## Criteria` and `## Verification` below them, or on a re-run the Spec as it stands on the issue.
 
 ```
 You are doubting a specification, not writing code. Do not edit, create, or delete any
 file, and do not run any command that changes state. Read and report only.
 
-Read, in this order:
+The Spec you are doubting is issue #{number}, "{spec title}". Its full body is between
+the two SPEC lines below. It is the whole Spec; do not look for it on disk.
 
-- {spec_file_path} — the Spec you are doubting
+----- SPEC BEGIN -----
+{spec body, verbatim}
+----- SPEC END -----
+
+Then read, in this order:
+
 - CONTEXT.md — this project's glossary; its Avoid lists govern what things may be called
 - {each ADR under docs/adr/ that touches this Spec's area, by path}
 
@@ -140,14 +256,14 @@ findings. Report what you doubt.
 ```
 
 The read-only instruction leads because a critic that edits the Spec has pre-empted the founder's
-resolution in step 7, which is the one step of this skill that is not the agent's to make.
+resolution in step 8, which is the one step of this skill that is not the agent's to make.
 
-## 5. Dispatch the entry
+### Dispatching an entry
 
 Every vendor is dispatched through the Agent tool. Only the subagent and how the model is named
 differ.
 
-**`codex`.** `subagent_type: "codex:codex-rescue"`, with the step 4 prompt prefixed by one line
+**`codex`.** `subagent_type: "codex:codex-rescue"`, with the step 6 prompt prefixed by one line
 naming the model:
 
 ```
@@ -158,7 +274,7 @@ When the entry's model is `default`, say so instead and let the wrapper choose: 
 asks callers to leave `--model` unset unless a specific model was requested, and `default` is the
 entry recording that choice.
 
-**`google`.** `subagent_type: "antigravity:agy-rescue"`, with the step 4 prompt prefixed by:
+**`google`.** `subagent_type: "antigravity:agy-rescue"`, with the step 6 prompt prefixed by:
 
 ```
 MODEL: {model}
@@ -168,10 +284,10 @@ do not pass --add-dir and do not write any file.
 
 `agy-rescue` is a thin forwarding wrapper around `agy --print`, the same role `codex-rescue` plays
 for Codex. It omits `--model` unless the caller asks for one, so the entry's model has to be named
-here or the Critique line would record a model that was never passed. Step 3 has already confirmed
+here or the Critique line would record a model that was never passed. Step 6 has already confirmed
 the id is offered on this account, which is what makes naming it safe.
 
-**`claude`.** The step 4 prompt, `model` set to the entry's model, and a read-only `subagent_type`:
+**`claude`.** The step 6 prompt, `model` set to the entry's model, and a read-only `subagent_type`:
 prefer a read-only agent type the project offers (`Explore` is one); otherwise `general-purpose`,
 whose write tools the prompt's first paragraph forbids.
 
@@ -183,12 +299,12 @@ entry that cannot run as configured. What must never happen is the Critique line
 that did not run.
 
 Wait for the agent to finish. **An agent that returns nothing usable has not failed the run, it has
-failed its entry:** apply step 3's fall-through, say which entry returned nothing, and try the next.
-Do not write the findings yourself, at any point in the chain. This session synthesised the Spec;
-this session doubting it is the thing the gate exists to prevent, which is also why the Claude entry
+failed its entry:** apply step 6's fall-through, say which entry returned nothing, and try the next.
+Do not write the findings yourself, at any point in the chain. This session derived the Criteria;
+this session doubting them is the thing the gate exists to prevent, which is also why the Claude entry
 is a fresh subagent and not this session reading the Spec again.
 
-## 6. Post the findings as one comment
+## 7. Post the findings as one comment
 
 One comment on the Spec issue, holding the critic's report unedited under a heading that names the
 critic and the date:
@@ -205,11 +321,27 @@ and a teammate reading the issue should find the doubts in one place.
 
 Keep the returned URL. Its `#issuecomment-{id}` fragment is the id the Critique line carries.
 
-## 7. Resolve every finding with the founder
+The comment can quote Criteria the issue does not carry yet. That is expected: the critic doubted
+the proposed Spec, and step 9 writes the settled one.
 
-One round. Present every finding at once, numbered, and take a resolution for each. Do not go back
-for a second pass: this is a gate on the Spec, not a redesign of it.
+## 8. Settle the Criteria and every finding with the founder
 
+One round, everything at once. Do not go back for a second pass: this is a gate on the Spec, not a
+redesign of it.
+
+On a first run, show:
+
+1. **The proposed Criteria**, every clause, not a summary, and the proposed **Verification**.
+2. **What you decided for them**: a story you wrote no Criterion for, and why; a Then you picked a
+   number for because the Spec never gave one; a file path in `/to-spec`'s sections, which is what
+   makes a Spec rot, named so they can decide.
+3. **The critic's findings**, numbered, each quoting the text it doubts.
+
+On a re-run there is no proposal, only the findings. With `--skip-critique`, or when every critic
+failed, there are no findings, only the proposal; say which, and why.
+
+Say plainly that nothing has been written yet, then wait. The Spec is the founder's, not yours.
+Apply what they change to the Criteria and the Verification, and take a resolution for each finding.
 Each finding ends in exactly one of three states:
 
 | Resolution | What it means | What you do |
@@ -218,96 +350,116 @@ Each finding ends in exactly one of three states:
 | **moved to Out of Scope** | Real, but not this feature | Add a line to `## Out of Scope` naming it |
 | **rejected** | Not a problem | Record the founder's reason, change nothing |
 
-A finding with no resolution is not resolved. If the founder leaves one open, ask again for that one
-rather than proceeding, because `/dispatch-slices` will not ask.
+A finding with no resolution is not resolved, and a silence is not a confirmation. If the founder
+leaves anything open, ask again for that one rather than proceeding, because `/dispatch-slices` will
+not ask.
 
 Where a finding says a Criterion is not binary, the accepted edit rewrites the Then clause until it
 resolves to pass or fail. `CONTRACTS.md` has the measurable/not-measurable table.
 
-**Never renumber a Criterion.** A Criterion dropped in this round leaves a gap in the ids, because
-its id may already be cited from a Slice, a test name, or a review comment. Adding one takes the
-next unused number.
+**Never renumber a Criterion.** Ids are cited from Slices, test names and review comments once they
+exist. A Criterion dropped in this round leaves a gap; one added takes the next unused number.
 
-## 8. Apply, set the Status, commit
+## 9. Write the Spec, then its Critique line and Status
 
-Apply the accepted edits to the Spec file. Then change the Status line in place and append one
-Critique line directly after `**Tracker:**`:
+**Write the body.** Read the issue body again immediately before writing. If it differs from what
+step 1 read, someone edited the Spec while the critic ran or the founder was deciding: **stop**,
+show what changed, and start again from step 1 rather than overwriting their edit. Otherwise write
+the settled Spec from its temporary file, so backticks and quotes survive the shell, and read it
+back:
+
+```bash
+gh issue edit {number} --body-file - < {body_file}
+python3 <this skill dir>/../../scripts/spec.py read {number}
+```
+
+On a first run the body is step 4's composition with step 8's changes, at `**Status:** draft`. On a
+re-run it is the body as it stood with step 8's changes; leave its header lines alone and skip the
+write when nothing was accepted or moved. A read that exits non-zero means the write broke the
+Spec's shape: **stop** and print the `✘` line before setting any Status.
+
+**Then the Critique line and the Status**, through the script, which keeps the header order and
+reads each write back:
+
+```bash
+python3 <this skill dir>/../../scripts/spec.py header {number} critique "{the Critique line}"
+python3 <this skill dir>/../../scripts/spec.py set-status {number} critiqued
+```
+
+The Critique line is `{vendor} ({model}), #{number} comment {id}, {YYYY-MM-DD}`: the critic that
+actually ran from step 6, the comment from step 7, and today's date. With `--skip-critique` it is
+`skipped, {reason}, {YYYY-MM-DD}`. The header then reads:
 
 ```markdown
 **Status:** critiqued
-**Tracker:** #60
 **Critique:** google (gemini-3.8-flash-high), #60 comment 2847193044, 2026-09-18
 ```
 
-The critic is `{vendor} ({model})` — the one that actually ran, from step 3. The comment reference
-is `#{number} comment {id}` from step 6. The date is today's, `YYYY-MM-DD`.
+**When every critic failed**, write the body and stop there: no Critique line, no Status change.
+The Spec stays at `draft`, which is exactly what `draft` means: anchored, and nobody has doubted it.
+A later `/critique-spec {number}` is a re-run that critiques it.
+
+Either script command exiting non-zero → **stop** and report it. The Status is `critiqued` when
+`set-status` reads it back, and not before.
 
 **The Spec stays a description of behaviour.** The findings live in the comment; the resolutions
 live in the Spec only as changed behaviour. Do not append a findings section, a resolution log, or a
-rejected-with-reason list to the file. The rejected reasons go in what you report to the founder and
-in the commit message, not in the Spec. A Spec that accumulates its own history stops being readable
-as a description of the code, which is the whole reason ADR 0001 put it in the repo.
+rejected-with-reason list to the body. A Spec that accumulates its own history stops being readable
+as a description of the code, and being that description is the Spec's whole job.
 
-Commit on the default branch:
-
-```bash
-git add {spec_file_path}
-git commit -m "Critique {number}: resolve {n} findings and mark the Spec critiqued"
-git push
-```
-
-**Push, and open a pull request if the push is rejected.** Every Slice worktree is cut from the
-remote default branch, so a Status of `critiqued` that only exists locally gates nothing: the
-sessions that read it never see it. A protected default branch rejects the push. Detect it that way
-rather than declaring it in a setting, then move the commit onto a branch and open a pull request
-for it:
+**Record the resolutions in one follow-up comment** on the Spec issue, after the Status is set,
+whenever there were findings:
 
 ```bash
-git switch -c chore/{number}-critique
-git push -u origin chore/{number}-critique
-gh pr create --head chore/{number}-critique --title "Critique {number}: mark the Spec critiqued" --body "..."
+gh issue comment {number} --body-file {resolutions_file}
 ```
 
-`switch -c` carries the commit onto the new branch and leaves the local default branch pointing at
-it too. That is untidy and harmless: it reconciles when the pull request merges. Do not rewind the
-default branch to tidy it. A history rewrite to fix cosmetics is not a trade this skill makes, and
-the founder's checkout is not this skill's to reset.
+One line per finding, numbered as step 8 presented them: `accepted`, `moved to Out of Scope`, or
+`rejected`, and for a rejected finding the founder's reason. The rejected reasons are the part that
+matters: the next reader of this Spec deserves to know what was doubted and waved through, and the
+body is not the place for it.
 
-Tell the founder to dispatch after it merges, and report `Status: draft → critiqued (pending #{pr})`
-rather than a bare `critiqued`. This is the same rejection-detected path `/anchor-spec` takes, and
-the reason neither skill carries a mode.
-
-## 9. Report
+## 10. Report
 
 ```
-Spec:     docs/specs/{number}-{slug}.md
-Critic:   {vendor} ({model}) — entry {i} of {n} in the Critics list
+Spec:     #{number} {title}
+Criteria: {n} ({m} manual, {k} command)
+Verify:   {Command: ... | Walkthrough, {k} steps}
+Critic:   {vendor} ({model}), entry {i} of {n} in the Critics list | skipped: {reason} | every entry failed
 Skipped:  {one line per earlier entry, naming it and why it did not run}
-Findings: {n} — {a} accepted, {o} moved to Out of Scope, {r} rejected
+Findings: {n}: {a} accepted, {o} moved to Out of Scope, {r} rejected
 Comment:  {comment_url}
-Status:   draft → critiqued
-Commit:   {sha} pushed to {default_branch}
+Resolved: {resolutions_comment_url}
+Status:   {(none) | draft} → {critiqued | draft}
 
-Next: /dispatch-slices {number}
+Next: {/to-tickets, then /dispatch-slices {number} | /critique-spec {number} once a critic can run}
 ```
 
-List each rejected finding with the founder's reason underneath. It is the only place that reason is
-written down, and the next reader of this Spec deserves to know what was doubted and waved through.
+List each rejected finding with the founder's reason underneath, the same reasons the resolutions
+comment carries.
 
 ## Rules
 
-- Only a Spec at `draft` is critiqued. Every other Status stops the run with the reason named.
-- The file is the Spec. When it and the Spec issue body disagree, the file is right.
+- **Nothing is written before the founder answers step 8.** Not the body, not the Status. The
+  findings comment is the one write before it, and it holds only the critic's own words.
+- **Add to `/to-spec`'s body, never rewrite it.** The Status line goes above it; `## Criteria` and
+  `## Verification` go below it.
+- Only an unanchored issue or a Spec at `draft` is critiqued. Every other Status stops the run with
+  the reason named.
+- The Spec is the body of its Spec issue, read through `spec.py`. Header lines are written only
+  through `spec.py`; the body is edited only by re-reading it and writing it back whole.
 - Never write the findings yourself, and never let the critic write the Spec. The critic doubts, the
   founder resolves, this skill edits.
 - The Critics chain is walked by
   [../../references/chain-walking.md](../../references/chain-walking.md). The Critique line names
   the entry that ran, never one that was skipped or returned nothing.
-- When no entry produces findings, write no Critique line and no comment, and leave the Spec at
-  `draft`.
-- Never renumber a Criterion.
+- When no entry produces findings, post no comment, write no Critique line, and leave the Spec at
+  `draft` with its confirmed Criteria.
+- **Never renumber a Criterion.**
+- **Never write a file path into a Spec.** A `Command:` line is the one exception.
 - The last entry of the Critics list must name `claude`. Without a floor the chain can run out,
   and a gate that can run out is not a gate.
 - Nothing from `docs/agents/workflow.md` enters the session's context beyond the entries this skill
   walks.
-- The Status change is only real once it is on the remote default branch.
+- The Status change is real once `spec.py set-status` reads it back. Nothing here touches the
+  repository.

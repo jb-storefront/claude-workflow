@@ -53,7 +53,7 @@ git fetch origin {headRefName} {baseRefName} {default}
   (`git status -sb` shows ahead/behind) and what to run. Return the PR to draft first, as below.
 
 **A stop is never a pass.** Wherever this skill stops before §6 (a checkout that is not the PR's
-head, an unusable Security reviewers list, a code reviewer that returned no sentinels, or a security
+head, an unusable Security reviewers list, a Spec list `gh` could not read, a code reviewer that returned no sentinels, or a security
 chain where no entry produced a result), it posts no summary, and if `isDraft` is false it returns
 the PR to draft with `gh pr ready {pr_number} --undo` and reads `.draft` back as `true` (§6 has the
 read-back). A PR left ready on a head nobody reviewed says the opposite of what
@@ -107,13 +107,20 @@ skill while it works. Neither waits on the other, and neither sees the other's f
 ### Pick the candidate implemented Specs
 
 A Spec names no file paths (`CONTRACTS.md` says why), so the Specs this diff might have drifted from
-are found by a cheap heuristic rather than a lookup:
+are found by a cheap heuristic rather than a lookup. Specs are Spec issues, and they live on the
+tracker: `{tracker}` is the repository §2 read the Slice from, or this PR's repository when there is
+no Slice.
 
-1. Take `docs/specs/*.md` whose `**Status:**` is `implemented`. A Spec still in progress is being
-   built, not drifted from.
+1. Take the Spec issues whose Status is `implemented`, open or closed:
+   `python3 <this skill dir>/../../scripts/spec.py list --status implemented --repo {tracker}`. A
+   Spec still in progress is being built, not drifted from. Exit 2 means `gh` failed: **stop**, and a
+   stop is never a pass (§1). A list that failed to load, read as no Specs, would let every drift
+   through unasked.
 2. Take the changed paths: `gh pr diff {pr_number} --name-only`.
-3. Keep a Spec when a word of its slug, or a `CONTEXT.md` **Language** term its Criteria use,
-   appears in a changed path. Match whole words, not substrings: `cart` matches `src/cart/summary.ts`
+3. Keep a Spec when a word of its title, or a `CONTEXT.md` **Language** term its Criteria use,
+   appears in a changed path. Read each candidate's Criteria with
+   `python3 <this skill dir>/../../scripts/spec.py read {spec} --repo {tracker}`; exit 2 there
+   stops the run as in step 1. Match whole words, not substrings: `cart` matches `src/cart/summary.ts`
    and not `src/descartes.ts`.
 4. Drop the Spec this Slice's `## Parent` points at. Its behaviour is what the diff is meant to change.
 
@@ -134,13 +141,14 @@ Review PR #{pr_number}.
 
 These Specs describe behaviour that already ships:
 
-{one line per candidate: `docs/specs/60-loyalty-earn-and-burn.md`, {its title}}
+{one line per candidate: `#60 Loyalty earn and burn`}
 {or, with no candidates: "No implemented Specs match the changed paths."}
 
-Flag any behaviour this diff changes that one of those Specs describes, where that Spec was
-not itself edited in this diff. Report each as:
+Each Spec is the body of its issue. Read it with `gh issue view {n} --repo {tracker}`.
 
-spec-drift: {spec file} | {the behaviour} | {path:line}
+Flag any behaviour this diff changes that one of those Specs describes. Report each as:
+
+spec-drift: #{spec} | {the behaviour} | {path:line}
 
 These drift findings are advisory. Do not count them in CRITICAL_COUNT or HIGH_COUNT, and do
 not let them change VERDICT.
@@ -231,7 +239,9 @@ the one place a Critical finding lands silently. Its **Spec** axis is the drift 
 blocks.
 
 Never block on a spec-drift finding. It is a question for the human, and the heuristic that raised
-it over-selects by design. Medium and Low findings, from either reviewer, are listed, not blocking.
+it over-selects by design. Resolving it is a person's call, made as an edit to the Spec issue or a
+fix to the diff, as `CONTRACTS.md` describes under **Keeping an implemented Spec true**; this skill
+reports the drift and leaves the Spec alone. Medium and Low findings, from either reviewer, are listed, not blocking.
 
 ## 6. Mark ready, or keep it a draft
 

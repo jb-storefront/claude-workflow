@@ -57,18 +57,26 @@ somewhere else, and the summary is not enough to write an assertion from.
 **In a repo whose `docs/agents/workflow.md` carries `**Specs:** off`**, read `## Parent` as absent
 and take the lone-Slice path below. `CONTRACTS.md` describes the line, and absent means `on`. Such a
 repo has declared it keeps no Specs, so a Parent there is a tracker reference and not a Spec, and
-stopping on the Spec file it does not have would make every Slice in the repo unstartable.
+stopping on the Spec it does not have would make every Slice in the repo unstartable.
 
 **With a `## Parent`.** The Slice cites a Spec:
 
-- The Spec file is `docs/specs/{parent-number}-{slug}.md` on the default branch. Find it with
-  `ls docs/specs/{parent-number}-*.md`; a worktree is cut from the remote default branch, so it is
-  already there.
-- Read its `## Criteria` section. For every id the Slice cites, take the whole Criterion: its
-  Given/When/Then or its EARS line, its `[manual]` or `[command]` tag if it carries one, and a
-  `[command]` Criterion's `Command:` line.
-- A cited id with no matching Criterion in the file, or a Spec file that does not exist, is a
-  **stop**. Report which id and which path. Writing a test from a one-line summary is how a
+- The Spec is the body of the Parent issue (`CONTRACTS.md`). Read it through the one script that
+  parses it:
+
+  ```bash
+  python3 <this skill dir>/../../scripts/spec.py read {parent-number}
+  ```
+
+  ([spec.py](../../scripts/spec.py).) Pass `--repo {owner}/{name}` when `## Parent` names the Spec
+  in owner-qualified form; a bare number resolves against this repository.
+- Its `criteria` array holds every Criterion. For every id the Slice cites, take the whole entry:
+  `text` is its Given/When/Then or its EARS line, `tag` is `manual`, `command` or null, and a
+  `[command]` Criterion's `command` is the command on its `Command:` line.
+- A cited id with no matching entry in `criteria` is a **stop**, and so is any non-zero exit: an
+  issue with no Status line (never anchored), a legacy `docs/specs/` pointer body (its `✘` line
+  prints the `spec.py migrate` command that brings it into the issue), a body that does not parse, or `gh` failing. Report
+  which id, or print the `✘` line as it is. Writing a test from a one-line summary is how a
   Criterion quietly becomes whatever the agent assumed it meant.
 
 **With no `## Parent`.** A lone Slice is its own Spec:
@@ -211,7 +219,7 @@ Then print:
 
 ```
 Slice:    #{number} - {title}
-Spec:     docs/specs/{parent}-{slug}.md   (or "none" on a lone Slice)
+Spec:     #{parent} {the Spec's title}   (or "none" on a lone Slice)
 Seam:     {the confirmed Seam}
 
 Criteria

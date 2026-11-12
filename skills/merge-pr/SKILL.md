@@ -186,13 +186,15 @@ and the Spec has to say so. Run the procedure in
 `closingIssuesReferences` recorded in §1.
 
 That procedure decides for itself whether anything is due. A merge that closed no Slice, a Slice
-with no parent Spec, and a Spec with other Slices still open each leave the Spec file and the Spec
-issue exactly as they were.
+with no parent Spec, and a Spec with other Slices still open each leave the Spec issue exactly as
+it was.
 
-It needs the main checkout, because it commits to the default branch and that branch is checked out
-there. Running `/merge-pr` from inside a slice's worktree is otherwise fine and stays fine — the
-close-out is the one step that pauses, and it reports which Spec is waiting so you can finish it
-from the main checkout.
+Marking the Spec `implemented` and closing its issue are issue edits, so they run from anywhere. A
+command-form Verification is the exception: it runs on a fresh default-branch tree, which means the
+main checkout, because that branch is checked out there. Running `/merge-pr` from inside a slice's
+worktree is otherwise fine and stays fine. When a command-form Verification is due there, the
+close-out has already written `implemented`, and it pauses and reports which Spec is waiting so you
+can run its Verification from the main checkout.
 
 ## 7. Summary
 

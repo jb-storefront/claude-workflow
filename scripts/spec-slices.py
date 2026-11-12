@@ -4,7 +4,7 @@
 Usage: spec-slices.py {spec}     (run inside a clone; gh resolves the repo)
 
 CONTRACTS.md makes the Spec issue's sub-issues the only roster of its Slices.
-/anchor-spec, /dispatch-slices and the Spec close-out all read it here, so the
+/dispatch-slices and the Spec close-out read it here, so the
 pagination and the back-compat rule live in one tested place.
 
 Prints, and exits 0:
@@ -26,7 +26,7 @@ the sub-issues cannot be trusted as the whole roster:
 
 Each line carries the command that links the issue. A `## Slices` list whose
 every entry is a sub-issue is not read, and one `note:` on stderr says
-/anchor-spec drops it. An empty `## Slices` heading is ignored.
+it can be deleted. An empty `## Slices` heading is ignored.
 
 Exits 2 when gh fails, so no reader mistakes an error for a Spec with no Slices.
 """
@@ -118,7 +118,7 @@ def roster(spec):
     if listed and not problems:
         note = (
             f"note: #{spec}'s body still carries a ## Slices task list; it is not read, "
-            "and /anchor-spec drops it on its next run"
+            "and can be deleted from the body"
         )
 
     slices = [

@@ -71,8 +71,7 @@ the repo is offered both plugins when they first trust the workspace:
 ```
 /grill-with-docs     →  reach shared understanding, update CONTEXT.md and ADRs inline   (Pocock)
 /to-spec             →  publish the spec as a tracker issue                             (Pocock)
-/anchor-spec         →  persist the Spec file with numbered Given/When/Then Criteria
-/critique-spec       →  a model from another vendor doubts the Spec before it is cut up
+/critique-spec       →  add Given/When/Then Criteria, have another vendor's model doubt them, settle both
 /to-tickets          →  break the spec into independently-grabbable slice issues        (Pocock)
 /dispatch-slices     →  fan the unblocked slices out to parallel background sessions
   └ per slice, inside its own worktree:
@@ -87,8 +86,7 @@ the repo is offered both plugins when they first trust the workspace:
 ```
 
 Everything not marked (Pocock) ships in this plugin, as do `/rebase-pr` and `/merge-pr` for the
-single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/anchor-spec` and
-`/critique-spec`, and `/dispatch-slices` treats every Slice as a lone one.
+single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/critique-spec`, and `/dispatch-slices` treats every Slice as a lone one.
 
 `/critique-spec` is best with Codex or Antigravity installed, so the doubt comes from another
 vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which

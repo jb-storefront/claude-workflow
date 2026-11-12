@@ -27,6 +27,7 @@ if ! python3 scripts/test-merge-gate.py; then fail=1; fi
 if ! python3 scripts/test-workflow-file.py; then fail=1; fi
 if ! python3 scripts/test-security-reviewers.py; then fail=1; fi
 if ! python3 scripts/test-spec-slices.py; then fail=1; fi
+if ! python3 scripts/test-spec.py; then fail=1; fi
 
 # Neither manifest can see the other, so strict validation passes on a version
 # disagreement that makes the marketplace advertise a release nobody shipped.
