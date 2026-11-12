@@ -24,7 +24,9 @@ one that does not invents a fourth way to build a user._
 
 1. The Slice issue: `## What to build`, `## Seam`, and `## Acceptance criteria`, whose checkboxes
    cite the Criteria as `#60 C1`.
-2. The Spec under `docs/specs/` for each cited Criterion's full Given/When/Then.
+2. The Spec issue the Slice's `## Parent` names, for each cited Criterion's full Given/When/Then:
+   `gh issue view {spec} --repo {owner}/{repo}`, in the repository that holds the Slice. Its body
+   is the Spec.
 3. `CONTEXT.md`, so the test names use the project's words.
 4. The existing tests nearest the Seam. Match their shape.
 

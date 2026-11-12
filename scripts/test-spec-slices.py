@@ -61,7 +61,7 @@ def search_hit(number, body, state="OPEN"):
     return {"number": number, "title": f"Issue {number}", "state": state, "body": body}
 
 
-SPEC_BODY = "Spec: `docs/specs/60-x.md` on the default branch\n\n## Criteria\n\n- C1 a\n"
+SPEC_BODY = "**Status:** in-progress\n\n## Criteria\n\n### C1\nGiven a\nWhen b\nThen c\n"
 
 
 def run(world, spec="60"):
@@ -149,7 +149,7 @@ def test_a_task_list_entry_that_is_not_a_sub_issue_stops():
 
 
 def test_a_task_list_that_agrees_with_the_sub_issues_is_ignored_with_a_note():
-    """a ## Slices list whose every entry is a sub-issue is not read, and says once that /anchor-spec drops it"""
+    """a ## Slices list whose every entry is a sub-issue is not read, and says once that it can be deleted"""
     world = {
         "spec_body": SPEC_BODY + "\n## Slices\n\n- [ ] #61\n",
         "sub_issue_pages": [[issue(61), issue(62)]],
@@ -159,11 +159,11 @@ def test_a_task_list_that_agrees_with_the_sub_issues_is_ignored_with_a_note():
         return False, f"exit {code}: {err!r}"
     if numbers(out) != [61, 62]:
         return False, f"roster is {numbers(out)}, expected the sub-issues"
-    return err.count("/anchor-spec") == 1, f"stderr {err!r}"
+    return err.count("can be deleted") == 1, f"stderr {err!r}"
 
 
 def test_an_empty_slices_heading_is_silent():
-    """the empty ## Slices heading /anchor-spec used to leave is neither read nor noted"""
+    """an empty ## Slices heading is neither read nor noted"""
     world = {"spec_body": SPEC_BODY + "\n## Slices\n\n", "sub_issue_pages": [[issue(61)]]}
     code, out, _, err = run(world)
     return code == 0 and numbers(out) == [61] and not err, f"exit {code}, stderr {err!r}"
@@ -213,13 +213,12 @@ def test_a_gh_failure_is_not_a_roster():
 
 READERS = {
     "skills/dispatch-slices/SKILL.md",
-    "skills/anchor-spec/SKILL.md",
     "references/spec-close-out.md",
 }
 
 
 def test_every_roster_reader_goes_through_the_script():
-    """dispatch-slices, anchor-spec and spec-close-out each run spec-slices.py"""
+    """dispatch-slices and spec-close-out each run spec-slices.py"""
     missing = [p for p in sorted(READERS) if "spec-slices.py" not in (ROOT / p).read_text()]
     return not missing, f"not run by: {', '.join(missing)}"
 

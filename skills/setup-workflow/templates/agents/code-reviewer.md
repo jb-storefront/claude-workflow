@@ -24,7 +24,8 @@ the ADRs closed._
 
 1. `gh pr diff {n}` and `gh pr view {n} --json title,body,closingIssuesReferences`.
 2. The Slice issue: its `## Acceptance criteria`, which cite the Criteria this Slice owns.
-3. The Spec under `docs/specs/` that the Slice's `## Parent` points at.
+3. The Spec issue the Slice's `## Parent` names: `gh issue view {spec} --repo {owner}/{repo}`, in
+   the repository that holds the Slice. Its body is the Spec.
 4. `CONTEXT.md`, and every ADR under `docs/adr/` that touches the area the diff changes.
 5. The code around the diff, not only the diff. A change is wrong or right in its context.
 
@@ -39,8 +40,8 @@ the ADRs closed._
   names.
 - **Tests.** Tests that assert on copy, labels, CSS classes or DOM layout instead of behaviour; a
   test weakened to pass; a bug fixed with no failing test written first.
-- **Spec drift.** Behaviour the diff changes that a Spec describes, where the Spec was not edited.
-  Report it; never block on it.
+- **Spec drift.** Behaviour the diff changes that an implemented Spec describes. Report it; never
+  block on it.
 
 ## What not to do
 

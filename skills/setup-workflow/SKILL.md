@@ -1,6 +1,6 @@
 ---
 name: setup-workflow
-description: Make a bare repo ready for the slice workflow: gitignore the worktrees directory, write a worktreeinclude when gitignored environment files exist, merge the marketplace and plugin block into the repo's committed settings, create the specs directory, write the per-repo workflow file, copy the PR-writer, code-reviewer and test-writer agent templates, and add the pointer block to CLAUDE.md. Explores first, shows the draft, writes on confirmation, and is safe to re-run. Use when the user says "/setup-workflow", "set this repo up for the loop", or is adopting the workflow plugin on a new repo.
+description: Make a bare repo ready for the slice workflow: gitignore the worktrees directory, write a worktreeinclude when gitignored environment files exist, merge the marketplace and plugin block into the repo's committed settings, write the per-repo workflow file, copy the PR-writer, code-reviewer and test-writer agent templates, and add the pointer block to CLAUDE.md. Explores first, shows the draft, writes on confirmation, and is safe to re-run. Use when the user says "/setup-workflow", "set this repo up for the loop", or is adopting the workflow plugin on a new repo.
 disable-model-invocation: true
 ---
 
@@ -44,14 +44,13 @@ a no-op instead of an overwrite.
 - `git status --porcelain`. Uncommitted changes are not fatal, but say how many files are already
   dirty so the user can tell this skill's diff from their own.
 
-**The seven artifacts**
+**The six artifacts**
 
 | What | How to read it |
 | --- | --- |
 | Worktrees ignored | `git check-ignore -v .claude/worktrees/` |
 | Environment files | `git check-ignore` over the `.env*` files found in the checkout; `.worktreeinclude` at the root |
 | Settings block | `.claude/settings.json`, parsed rather than grepped |
-| Specs directory | `docs/specs/` |
 | Workflow file | `docs/agents/workflow.md` |
 | Agent templates | `.claude/agents/*.md`, reading each file's frontmatter |
 | Pointer block | `CLAUDE.md`, then `.claude/CLAUDE.md`, then `AGENTS.md` |
@@ -79,7 +78,7 @@ not hand it a generic template.
 **Whether the repo has a test Seam.** A lockfile at the repo root from the table `/finalize-pr`
 detects toolchains by: `bun.lockb`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `uv.lock`.
 This decides the value the draft proposes for the workflow file's `**Specs:**` line, and only that.
-A repo with no test Seam cannot verify a Spec's Criteria, so a Spec anchored for it is a file
+A repo with no test Seam cannot verify a Spec's Criteria, so a Spec anchored for it holds Criteria
 nothing can check; the draft proposes `off` there and `on` everywhere else. The user sees the
 proposal in §2 before anything is written, and the file is theirs to edit afterwards.
 
@@ -110,7 +109,6 @@ Print one block per artifact, in the order of §3, each marked with what will ha
   write    .gitignore                 + .claude/worktrees/
   write    .worktreeinclude           + .env, + .env.local
   merge    .claude/settings.json      + 2 extraKnownMarketplaces, + 2 enabledPlugins
-  write    docs/specs/.gitkeep        new
   write    docs/agents/workflow.md    new (Specs: on, has a test Seam; critics and security reviewers: codex, google, claude)
   copy     .claude/agents/            + pr-writer.md, + test-writer.md
   skip     .claude/agents/            code-reviewer: ucp-demo-code-reviewer.md covers the role
@@ -118,7 +116,7 @@ Print one block per artifact, in the order of §3, each marked with what will ha
 ```
 
 Show the **full literal content** of anything new: the settings block, the workflow file, and the
-pointer block. For the workflow file, that is the draft the script in §3 step 5 prints without
+pointer block. For the workflow file, that is the draft the script in §3 step 4 prints without
 `--write`, new file or changed one alike. Show the merged result for the settings file, not the fragment, so the user can see
 their other keys survived.
 
@@ -218,13 +216,7 @@ resolve it.
 **Nothing about Codex goes in this file**, on any run. Enabling a third-party plugin for everyone
 who clones the repo is a decision for a human, and §4 prints the commands instead.
 
-**4. Create the specs directory.** `docs/specs/`, holding a `.gitkeep`.
-
-The `.gitkeep` is not decoration. Git tracks files, not directories, so a directory that exists
-only on this machine is not in the worktrees that `/anchor-spec` and every Slice read Specs from,
-and those are cut from the remote default branch.
-
-**5. Write the per-repo workflow file.** `docs/agents/workflow.md`, beside Pocock's
+**4. Write the per-repo workflow file.** `docs/agents/workflow.md`, beside Pocock's
 `issue-tracker.md`, `triage-labels.md` and `domain.md`. Three settings, and nothing else;
 `CONTRACTS.md` describes all three:
 
@@ -303,7 +295,7 @@ exceptions, both shown in the §2 draft before anything is written:
   It never adds, drops, or reorders an entry while doing it: this converts a shape, it does not
   choose a critic.
 
-**6. Copy the agent templates.** From this skill's `templates/agents/` into the repo's
+**5. Copy the agent templates.** From this skill's `templates/agents/` into the repo's
 `.claude/agents/`:
 
 - [templates/agents/pr-writer.md](templates/agents/pr-writer.md)
@@ -319,7 +311,7 @@ the user's job, and §4 tells them so. Offer to name the copies for the repo
 (`ucp-demo-pr-writer.md`) since that is what real projects do, but do not require it:
 `/finalize-pr` and `/review-pr` match on the role in the frontmatter and do not care about the filename.
 
-**7. Append the pointer block.** Pick the file the same way `/setup-matt-pocock-skills` does, so
+**6. Append the pointer block.** Pick the file the same way `/setup-matt-pocock-skills` does, so
 the two skills never write to different files in the same repo:
 
 - `CLAUDE.md` at the root, if it exists.
@@ -334,9 +326,25 @@ Append:
 ## Slice workflow
 
 One Spec per feature, cut into Slices that parallel sessions build in their own worktrees:
-`/anchor-spec` → `/critique-spec` → `/to-tickets` → `/dispatch-slices` → per Slice
+`/to-spec` → `/critique-spec` → `/to-tickets` → `/dispatch-slices` → per Slice
 `/start-issue` → `/acceptance-tests` → `/tdd` → `/finalize-pr` → `/review-pr` → `/merge-stack`.
 
+Specs live in the body of their Spec issue. Nothing about a Spec is committed, and changing one is
+an issue edit, never a pull request.
+
+The shape of every artifact the loop reads and writes is documented once, in the workflow plugin's
+[CONTRACTS.md](https://github.com/jb-storefront/claude-workflow/blob/main/CONTRACTS.md). Read it
+before hand-writing or parsing a Spec or a Slice body.
+```
+
+If a `## Slice workflow` heading already exists, leave the section as it stands. It may have been
+edited on purpose, and a pointer block is not worth clobbering a sentence someone wrote.
+
+**One exception: the block an earlier version of this skill appended.** When Specs were committed
+files, this step wrote the same section with these two paragraphs in place of the second and third
+above:
+
+```markdown
 Specs live in `docs/specs/`, one file per Spec, committed to the default branch. The Spec issue is
 only its handle, and the file wins when the two disagree.
 
@@ -345,8 +353,16 @@ The shape of every artifact the loop reads and writes is documented once, in the
 before hand-writing or parsing a Spec file, a Spec issue body, or a Slice body.
 ```
 
-If a `## Slice workflow` heading already exists, leave the section as it stands. It may have been
-edited on purpose, and a pointer block is not worth clobbering a sentence someone wrote.
+A `## Slice workflow` section whose text is exactly that old block, every line as shipped, is the
+plugin's own stale prose rather than something a user wrote, and it now sends every session looking
+for a directory nothing writes to. Replace it with the block above, show both in the §2 draft, and
+report it as `updated`. Any other difference, a single word included, means a person touched the
+section: leave it alone and report it as `stale, edited by hand`, quoting the line that still names
+`docs/specs/`, so the user can fix it themselves.
+
+**A `docs/specs/` directory already in the repo is left where it is.** Nothing reads it any more,
+but it may hold Specs written before they moved into their issues, and deleting committed history
+is not this skill's call. Say so in §4.
 
 ## 4. Report
 
@@ -356,12 +372,15 @@ Repo:      {owner}/{repo} on {default branch}
   {written | unchanged}  .gitignore              .claude/worktrees/
   {written | unchanged | not needed}  .worktreeinclude    {paths, or "no gitignored .env files"}
   {merged | unchanged}   .claude/settings.json   marketplace + 2 plugins
-  {created | unchanged}  docs/specs/
   {written | updated | unchanged}  docs/agents/workflow.md Specs: {on | off} ({has | no} test Seam); critics and security reviewers: codex → google → claude
   {copied | unchanged}   .claude/agents/         {files, or which existing agent covers each role}
-  {appended | unchanged} {CLAUDE.md}             ## Slice workflow
+  {appended | updated | unchanged | stale, edited by hand} {CLAUDE.md}   ## Slice workflow
 
 Still yours to do:
+  - (Only when docs/specs/ exists.) docs/specs/ is no longer used: Specs live in their Spec issues
+    now. Any Spec file still in it predates that; `python3 <plugin>/scripts/spec.py migrate {n}`
+    brings one back into its issue.
+    The directory was left in place.
   - Fill in the {{DOMAIN}} paragraph in each copied agent. Until then they review generically.
   - Run `claude` in this repo once and accept the workspace trust dialog. Worktrees live inside
     the trusted checkout, so background sessions never ask again.
@@ -439,7 +458,8 @@ done. Changing the critics, the security reviewers, their order, or the Specs va
 - **Explore, draft, confirm, write.** Never write before the confirmation, on any run, including
   one where every artifact is absent and the answer looks obvious.
 - **Idempotent means unchanged, not rewritten.** Re-running must not reorder a file, restyle JSON,
-  or replace a user's chosen critics, agent, or pointer prose. Report `unchanged` and move on.
+  or replace a user's chosen critics, agent, or pointer prose. Report `unchanged` and move on. The
+  one pointer block it replaces is its own earlier one, word for word (§3 step 6).
 - **Merge, never replace, for `.claude/settings.json` and `.worktreeinclude`.** Both are files the
   repo owns and this skill is a guest in.
 - **Never read or print a `.env` file.** Paths only.

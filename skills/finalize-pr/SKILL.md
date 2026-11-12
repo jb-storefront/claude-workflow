@@ -15,7 +15,7 @@ review and is the only skill that marks a PR ready. This skill never does.
 
 ## The shapes this skill reads and writes
 
-`CONTRACTS.md` at the repo root. The Slice body, the Spec file, the Criterion grammar, the test
+`CONTRACTS.md` at the repo root. The Slice body, the Spec, the Criterion grammar, the test
 name that proves a Criterion, and the four states this skill reports are all defined there. Read it
 before changing anything below, and read it instead of this skill when you want to hand-write a
 Slice that this skill accepts.
@@ -82,7 +82,7 @@ from the body rather than from GitHub's own linkage, since a hand-edited body co
 
 | What the checkbox carries | `{id}` | Where the Criterion's full text lives |
 | --- | --- | --- |
-| `#60 C1 …`, with `## Parent` naming `#60` | `#60 C1` | the Spec file, section `### C1` |
+| `#60 C1 …`, with `## Parent` naming `#60` | `#60 C1` | the Spec, the body of issue `#60`, section `### C1` |
 | `#74 C1 …` on a lone Slice, `#74` being its own number | `#74 C1` | the checkbox itself |
 | no id at all | none | the checkbox itself |
 
@@ -99,7 +99,7 @@ Criterion's command is the backticked command on its `Command:` line:
 
 | Criterion | Where its command is |
 | --- | --- |
-| Cited from a Spec | The `Command:` line closing `### C{n}` in the Spec file |
+| Cited from a Spec | The `Command:` line closing `### C{n}` in the Spec, which `spec.py read` returns as `command` |
 | On a lone Slice | The checkbox itself, after `Command:` |
 
 `CONTRACTS.md` has the grammar. A `[command]` Criterion with no `Command:` line has no command, and
@@ -113,7 +113,7 @@ on this run. When something looks wrong, record it for the `ⓘ` lines in §13 a
 and carry on:
 
 - The Slice's checkboxes carry no ids.
-- A checkbox tag disagrees with the Spec file. The file wins for this run; the checkbox is stale.
+- A checkbox tag disagrees with the Spec. The Spec wins for this run; the checkbox is stale.
 - An untagged Criterion whose check is a command, such as "the dry run against the sandbox accepts
   the SQL": it belongs to `[command]`.
 - A `[manual]` Criterion whose check is a command a session can run: it belongs to `[command]`.
@@ -122,24 +122,38 @@ Retagging a Criterion to change its state is passing this skill's own gate by ed
 `CONTRACTS.md` has the worked example: gr4vy/gr4ce#470, where a session retagged two command
 Criteria `[manual]` to clear the gate.
 
-### The Spec file
+### The Spec
 
-When `## Parent` names a Spec issue, find `docs/specs/{spec_issue}-*.md` on this branch and read its
-`## Criteria` section: the full Given/When/Then for each cited id, its tag, and a `[command]`
-Criterion's `Command:` line.
+When `## Parent` names a Spec issue, the Spec is that issue's body, on the tracker. Read it from
+the repository §2 read the Slice from:
 
-**The file wins.** When the Spec file and the Slice checkbox disagree on a Criterion's text, its tag
-or its command, the file is right and the checkbox is stale. Report the disagreement; do not fix the
+```bash
+python3 <this skill dir>/../../scripts/spec.py read {spec_issue} --repo {owner}/{repo}
+```
+
+Its JSON carries each Criterion as `{id, tag, text, command}`: the full Given/When/Then for each
+cited id, its tag, and a `[command]` Criterion's command. Never parse the issue body by hand;
+`CONTRACTS.md` has the grammar and `spec.py` is where it is tested.
+
+**The Spec wins.** When the Spec and the Slice checkbox disagree on a Criterion's text, its tag
+or its command, the Spec is right and the checkbox is stale. Report the disagreement; do not fix the
 checkbox.
 
 When `docs/agents/workflow.md` carries `**Specs:** off`, the repository keeps no Specs, and
-`## Parent` is read as absent: no Spec file is looked for, nothing is noted, and the Slice is a lone
-Slice whose checkboxes are its Criteria. `CONTRACTS.md` describes the line; absent means `on`. The
-four states, the gate, and the block on `unverified` are the same either way.
+`## Parent` is read as absent: no Spec is read, nothing is noted, and the Slice is a lone Slice
+whose checkboxes are its Criteria. `CONTRACTS.md` describes the line; absent means `on`. The four
+states, the gate, and the block on `unverified` are the same either way.
 
-No Spec file for a named Parent → note it once and fall back to the checkbox text, as for a lone
-Slice. A Parent pointing at a Spec nobody anchored is worth saying out loud; it is not worth
-stopping for.
+What `spec.py` exits with decides the rest:
+
+- **Exit 1, not a Spec** → note it once and fall back to the checkbox text, as for a lone Slice. A
+  Parent pointing at a Spec nobody anchored is worth saying out loud; it is not worth stopping for.
+- **Exit 1, a legacy pointer** (its `✘` line names `spec.py migrate`) → the same fallback, and the
+  note carries the migrate command from the `✘` line. The body points at a file from the old
+  contract, and no reader falls back to that file.
+- **Exit 2** → **stop** and relay its stderr. `gh` failed, and a Spec that could not be read is not
+  a Spec that does not exist: falling back would hold every cited Criterion to a checkbox the Spec
+  may contradict.
 
 ## 3. Bootstrap context
 
@@ -487,7 +501,7 @@ Body structure:
 ⓘ Ids: the Slice's Criteria carry no ids, so no test can be matched to one. Add them on the tracker.
 ⓘ Tag: #60 C8 reads as a command ("{its wording}") and carries no tag. Tag it [command] with its
 Command: line on the tracker and re-run. This run held it to the untagged rule.
-ⓘ Tag: #60 C4 is [command] in the Spec file and [manual] on #62. The file wins; fix #62.
+ⓘ Tag: #60 C4 is [command] in the Spec and [manual] on #62. The Spec wins; fix #62.
 
 {when §8 reported a Frame MISSING, once per Criterion:}
 ✘ #60 C5 - a Frame is declared at `docs/agents/frames.md:9` and none was captured: {reason}. Blocking.
@@ -552,7 +566,7 @@ PR:       #{pr_number} — {pr_title}
 URL:      {pr_url}
 Branch:   {branch}
 Slice:    #{issue_number}
-Spec:     {docs/specs/60-….md | lone Slice, no Spec | #60 named, no Spec file found | Specs off, per docs/agents/workflow.md}
+Spec:     {#60 {its title} | lone Slice, no Spec | #60 named, not a Spec | #60 named, a legacy pointer; run spec.py migrate 60 | Specs off, per docs/agents/workflow.md}
 Criteria: {V} verified, {W} weak, {M} manual, {U} unverified   (of {N})
 Worktree: {path}
 

@@ -8,7 +8,7 @@ description: Fan out unblocked Slices to parallel local Claude Code sessions, on
 Turn a set of ready Slices into a set of running background sessions — one git worktree per Slice,
 each going issue → failing tests → TDD → reviewed PR on its own.
 
-This is the fan-out step of the `/to-spec` → `/anchor-spec` → `/critique-spec` → `/to-tickets` →
+This is the fan-out step of the `/to-spec` → `/critique-spec` → `/to-tickets` →
 **`/dispatch-slices`** → `/merge-stack` pipeline. It runs in the **main checkout** and builds
 nothing itself: it checks the Spec, picks the Slices, writes the prompts, and launches. Each
 dispatched session runs `/start-issue`, then `/acceptance-tests`, then `/tdd`, then `/finalize-pr`.
@@ -20,7 +20,7 @@ keeps no Specs at all passes both: there is nothing to doubt and nothing to own.
 says so once, with `**Specs:** off` in its per-repo workflow file, and both gates go quiet for it
 (§2).
 
-Artifact shapes — the Spec file, the Spec issue body, the Slice body, the Criterion grammar — are in
+Artifact shapes (the Spec, which is the Spec issue body, the Slice body, the Criterion grammar) are in
 `CONTRACTS.md` at the repo root. This skill reads them; it does not restate them.
 
 ## Input
@@ -59,10 +59,10 @@ session will start from.
 **Read the repository's declaration first.** `docs/agents/workflow.md` may carry a `**Specs:**`
 line; `CONTRACTS.md` describes it. Absent, or `on`, means the rest of this section applies. `off`
 means the repository keeps no Specs, and every Slice in the set is a lone Slice whatever its
-`## Parent` names: this section reads no Spec file, §4 and §7 do not run, §6 names the declaration
+`## Parent` names: this section reads no Spec, §4 and §7 do not run, §6 names the declaration
 once in place of a `Spec:` line, and §8 drops the Spec clause from every prompt. Nothing warns
-about an absent Spec file, because the repository has declared it will never have one. Read the
-value from the file on the default branch, once per run.
+about an unanchored Parent, because the repository has declared it will never anchor one. Read the
+value from `docs/agents/workflow.md` on the default branch, once per run.
 
 ```bash
 grep -E '^\*\*Specs:\*\*' docs/agents/workflow.md
@@ -77,17 +77,27 @@ names none is a **lone Slice** — exempt from this section and from §4, and he
 later by `/finalize-pr`. A discovery run can therefore touch several Specs and several lone Slices
 at once; check each Spec once, not once per Slice.
 
-**Read the file, not the issue body.** The Spec file is `docs/specs/{spec}-{slug}.md` on the default
-branch; find it with `ls docs/specs/{spec}-*.md`. `CONTRACTS.md` makes the file win on conflict, so
-the Status this gate reads is the file's and never the issue's.
+**Read it through `spec.py`.** The Spec is the body of its Spec issue (`CONTRACTS.md`), and one
+script parses it:
 
-| What the Spec file says | What to do |
+```bash
+python3 <this skill dir>/../../scripts/spec.py read {spec}
+```
+
+([spec.py](../../scripts/spec.py).) Pass `--repo {owner}/{name}` when the Slice's `## Parent` names
+the Spec in owner-qualified form; a bare number resolves against this repository. Keep the JSON it
+prints: §4 reads its `criteria`, §5 reads each Criterion's `tag`, and §6 reads its `title`.
+
+| What `spec.py read` says | What to do |
 | --- | --- |
-| `**Status:** draft` | **Stop.** Nobody has doubted this Spec |
-| `**Status:** critiqued` | Proceed. This is the first fan-out; §7 applies |
-| `**Status:** in-progress` | Proceed. A fan-out already happened; §7 leaves the file alone |
-| `**Status:** implemented` or `superseded` | **Warn**, and name it in the §6 confirmation |
-| The file does not exist | **Warn**, and name it in the §6 confirmation. §4 and §7 do not run |
+| `status` is `draft` | **Stop.** Nobody has doubted this Spec |
+| `status` is `critiqued` | Proceed. This is the first fan-out; §7 applies |
+| `status` is `in-progress` | Proceed. A fan-out already happened; §7 leaves the Status alone |
+| `status` is `implemented` or `superseded` | **Warn**, and name it in the §6 confirmation |
+| Exit 1, the issue carries no `**Status:**` line | **Warn**: the Spec was never anchored. Name it in the §6 confirmation. §4 and §7 do not run |
+| Exit 1, the `✘` line names `spec.py migrate` | **Stop.** The body is a pointer to a Spec file from before Specs lived in the issue |
+| Exit 1, any other `✘` line | **Stop**, and print the line. The body is a Spec that does not parse |
+| Exit 2 | **Stop.** The tracker could not be read, which is not the same as an unanchored Spec |
 
 A stop names the Spec, the Status, and the command that clears it:
 
@@ -103,32 +113,44 @@ would build every ambiguity in it five times in parallel.
 
 Or, when the Spec is small enough that the gate is not worth it:
 
-  /anchor-spec 60 --skip-critique "<reason>"
+  /critique-spec 60 --skip-critique "<reason>"
 ```
 
-The two outcomes above are not alike, and the difference is the whole point of the gate:
+A legacy pointer stops with the command that migrates it:
 
-- **A `draft` Spec file** means somebody started the process and skipped the doubt step. Worth
+```
+/dispatch-slices — stopped, nothing dispatched
+
+Spec #60 is a pointer to docs/specs/60-loyalty-earn-and-burn.md, a Spec anchored under the old
+contract. Its Status and Criteria are in that file, not in the issue, so nothing here can gate it.
+
+  {the spec.py migrate command from the ✘ line}      bring the Spec back into the issue body
+```
+
+The draft and unanchored outcomes are not alike, and the difference is the whole point of the gate:
+
+- **A `draft` Spec** means somebody started the process and the doubt step has not run. Worth
   blocking, and it stays a stop.
-- **No Spec file at all** means the process was never started here. Nothing was skipped, so there is
-  nothing to catch.
+- **A Parent that was never anchored** means the process was never started here. Nothing was
+  skipped, so there is nothing to catch.
 
 A repository that keeps no Specs is one this workflow already blesses: that is the lone Slice above,
 exempt from this section and from §4. The same repository, with the same absence of a Spec, must not
-become undispatchable because a Slice happens to name its parent. So a missing file warns, and the
-Slices that name it dispatch the way a lone Slice does.
+become undispatchable because a Slice happens to name its parent. So an unanchored Parent warns, and
+the Slices that name it dispatch the way a lone Slice does.
 
-Two consequences follow, and both are silences rather than extra work. §4 has no Criteria to read
-and does not run for that Spec — a run that warned about a missing Spec and then stopped on forty
-uncited Criteria would have gained nothing. §7 has no file to write a Status into and touches the
-default branch not at all.
+A legacy pointer is the opposite case, which is why it stops rather than warns. A Spec exists, with
+a Status and Criteria, and dispatching its Slices as lone Slices would skip both gates on a Spec
+somebody did anchor. `spec.py migrate` brings it into the issue once, and the next run reads it
+normally.
 
-**Warn once per absent Spec, not once per Slice naming it.** The human needs to know the Spec is
+Two consequences follow from an unanchored Parent, and both are silences rather than extra work. §4
+has no Criteria to read and does not run for that Spec. A run that warned about a missing Spec and
+then stopped on forty uncited Criteria would have gained nothing. §7 has no Status to move and
+writes nothing.
+
+**Warn once per unanchored Spec, not once per Slice naming it.** The human needs to know the Spec is
 missing; three lines saying so about the same Spec is noise.
-
-Do not fall back to the Spec issue body for a Status. The body is not the Spec, `CONTRACTS.md` makes
-the file win, and a Status read from a body is a gate that anyone can open by editing an issue. An
-absent file has no Status, which is exactly why this row warns instead of choosing one.
 
 `implemented` and `superseded` are warnings rather than stops for a different reason: both have
 honest readings — a follow-up Slice on a landed Spec, or a Slice being finished on a Spec that a
@@ -170,12 +192,12 @@ If the set is empty, report why per issue and stop.
 
 ## 4. Check that every Criterion is owned
 
-Skip this for a lone Slice, and for a Spec §2 found no file for: the Criteria this section compares
-against live in that file, and there is no second copy to fall back to. For every remaining Spec in
-play:
+Skip this for a lone Slice, and for a Spec §2 found unanchored: an issue with no Status line has no
+Criteria for this section to compare against. For every remaining Spec in play:
 
-- **The Spec's Criteria** are the `### C{n}` headings in its `## Criteria` section:
-  `grep -oE '^### C[0-9]+' docs/specs/{spec}-{slug}.md`.
+- **The Spec's Criteria** are the `id`s in the `criteria` array §2's `spec.py read` printed. Do not
+  grep the issue body for them; `spec.py` is the one parser of the Criterion grammar, and it has
+  already refused a body whose headings do not parse.
 - **The Slices' citations** are the `#{spec} C{n}` ids under each Slice's `## Acceptance criteria`
   heading, and nowhere else in the body:
 
@@ -259,11 +281,11 @@ One rule, and it is the whole rule:
 `[command]` is AFK. `/finalize-pr` runs its command, and one that needs a credential the session
 lacks blocks there with that reason, which is cheaper than holding the whole Slice for a person.
 
-Read the tag from the **Spec file**, for each id the Slice cites: `grep -E '^### C[0-9]+ \[manual\]'`
-on the `## Criteria` section. The Slice body repeats the tag and the Spec issue body repeats it
-again, and either copy can be stale; the file wins. A lone Slice has no file, so its own checkboxes
-are the Criteria and the tag is read from them. A Slice whose Spec file §2 found missing is read the
-same way, for the same reason: there is no file to win.
+Read the tag from the **Spec**, for each id the Slice cites: the `tag` of that Criterion in the
+`criteria` §2's `spec.py read` printed, where `"manual"` is the one that makes a Slice HITL. The
+Slice body repeats the tag, and that copy can be stale; the Spec wins. A lone Slice has no Spec, so
+its own checkboxes are the Criteria and the tag is read from them. A Slice whose Spec §2 found
+unanchored is read the same way, for the same reason: there is no Spec to win.
 
 **Nothing else classifies.** Not labels — `ui`, `ux` and `demo` on an issue mean nothing here. Not
 wording — a Criterion phrased as what a person sees is still AFK when it carries no tag. The
@@ -313,24 +335,24 @@ Skipped: #59 (assigned), #60 (the Spec issue)
 Base:    origin/{default} @ {base_sha}
 Trees:   .claude/worktrees/issue-61, issue-62, issue-63
 Ports:   20610-20619, 20620-20629, 20630-20639
-Action:  set the Spec to in-progress on {default}, then one background session per Slice,
+Action:  set the Spec to in-progress on #60, then one background session per Slice,
          each in its own worktree, running independently.
 Proceed?
 ```
 
-An absent Spec file changes two lines of that block and nothing else. Its `Spec:` line carries
-neither a Status transition nor a coverage count, since both are read from the file, and it gets one
+An unanchored Spec changes two lines of that block and nothing else. Its `Spec:` line carries
+neither a Status transition nor a coverage count, since both are read from the Spec, and it gets one
 `Warned:` entry however many of the Slices below name it:
 
 ```
-Spec:    #60 — no Spec file on {default}; dispatching its Slices as lone Slices
+Spec:    #60 not anchored; dispatching its Slices as lone Slices
 
-Warned:  #60  no Spec file at docs/specs/60-*.md. Coverage not checked, Status not written.
-              /anchor-spec 60 if this repo does keep Specs.
+Warned:  #60  carries no Status line, so it was never anchored. Coverage not checked, Status not written.
+              /critique-spec 60 if this repo does keep Specs.
 ```
 
 Under `**Specs:** off` the block carries no `Spec:` line, no Status transition and no coverage
-count, and no `Warned:` entry about any Spec file. In their place, one line, however many Slices
+count, and no `Warned:` entry about any Spec. In their place, one line, however many Slices
 name a `## Parent`:
 
 ```
@@ -341,51 +363,39 @@ Ask once. After approval, run §7 and §8 for the whole set without further prom
 
 ## 7. Set the Spec's Status to in-progress
 
-**Once per Spec §2 found, not once per fan-out.** A discovery run can be dispatching Slices from two
+**Once per Spec §2 read, not once per fan-out.** A discovery run can be dispatching Slices from two
 Specs at the same time; each is at its own point in its own lifecycle, and the one that is already
 `in-progress` must not be touched while the other moves.
 
-For each of them: only when its Spec file reads `critiqued`. At `in-progress` it is already right,
-and at `implemented` or `superseded` §2 already warned — do not walk a Status backwards. A Spec §2
-found no file for is skipped outright: no line to change, nothing to commit, nothing to push, and
-the default branch left exactly as §1 found it.
+For each of them: only when §2 read `critiqued`. At `in-progress` it is already right, and at
+`implemented` or `superseded` §2 already warned, so do not walk a Status backwards. A Spec §2 found
+unanchored is skipped outright: it has no Status line to change.
 
-Change the one line, commit only that file, and push to the default branch, so that every worktree
-§8 cuts is cut from a Spec that already says work has started:
+Set it before §8 launches anything, so a session that reads the Spec finds one that already says
+work has started:
 
 ```bash
-git add docs/specs/{spec}-{slug}.md
-git commit -m "docs: the Spec for #{spec} is in progress"
-git push origin {default}
+python3 <this skill dir>/../../scripts/spec.py set-status {spec} in-progress
 ```
 
-Two things can go wrong, and neither holds the fan-out:
+Pass the same `--repo` §2 did. The script rewrites the Status line and no other byte of the body,
+reads it back, and prints `unchanged` when another run got there first. A Status change is an issue
+edit; nothing is committed and the default branch is not touched.
 
-- **The main checkout is not on `{default}`.** Do not commit the Spec onto whatever branch happens
-  to be out. Report the edit the founder needs to land and carry on.
-- **The push is rejected.** The default branch is protected — detected here the same way
-  `/anchor-spec` detects it, by being told no. Undo the commit before carrying on:
-
-  ```bash
-  git reset --keep origin/{default}
-  ```
-
-  `--keep` rather than `--hard`: it aborts on local changes instead of destroying them. Leaving the
-  commit sitting unpushed would be worse than never making it — §1 **stops** on unpushed commits, so
-  the next `/dispatch-slices` on this repo would refuse to run until someone worked out why. If the
-  reset aborts, say so and stop touching git; the founder's tree is theirs.
-
-  Then report the one-line edit the founder should land, and carry on with §8.
+A failure does not hold the fan-out. Exit 1 is a transition the script refused, most likely because
+somebody moved the Status between §2 and here, or an edit that did not read back; exit 2 is `gh`
+failing. Either way, print the `✘` line and the `spec.py set-status` command for the founder to
+re-run once they have seen why, and carry on with §8.
 
 Carrying on is deliberate, and it is not because nothing reads the value. `/critique-spec` does:
 `in-progress` is one of the states it refuses to re-critique from. What makes carrying on safe is
-that the state the file is left in — `critiqued` — is *also* one it refuses to run from, so the
-guard holds either way and only the message a founder would see gets worse. `/merge-stack` moves
-the Status to `implemented` from wherever it finds it.
+that the state the Spec is left in, `critiqued`, is *also* one it refuses to run from, so the guard
+holds either way and only the message a founder would see gets worse. `/merge-stack` moves the
+Status to `implemented` from wherever it finds it.
 
 What the founder loses is a line that tells a reader work has started. What they would lose by
-stopping is five ready Slices, held until somebody merges a one-line pull request. Say which line
-needs landing, and dispatch.
+stopping is five ready Slices, held over a one-line issue edit. Say which line needs changing, and
+dispatch.
 
 ## 8. Dispatch
 
@@ -429,9 +439,8 @@ looking, sometimes as far as killing the process holding it. Closing the questio
 
 On a lone Slice, drop the `— refer to the Spec…` clause. The rest is unchanged: a lone Slice numbers
 its own Criteria and `/acceptance-tests` writes them back to the issue body. Drop it on a Slice whose
-Spec file §2 found missing too — pointing a session at a Spec issue whose file is not on the default
-branch sends it looking for Criteria that are not there. Under `**Specs:** off`, drop it on every
-Slice, for the same reason.
+Spec §2 found unanchored too: pointing a session at a Spec issue with no Status line sends it looking
+for Criteria that are not there. Under `**Specs:** off`, drop it on every Slice, for the same reason.
 
 The four skills are one chain, not a menu: a session dispatched straight to `/tdd` skips the step
 that names its tests after Criteria, and arrives at `/finalize-pr` with nothing matching an id. See
@@ -493,7 +502,7 @@ Notes that are easy to get wrong:
 ```
 /dispatch-slices — {N} dispatched
 
-Spec:    #60 — Status in-progress on {default}
+Spec:    #60 at Status in-progress
 
   #61  74005c92  AFK   .claude/worktrees/issue-61  worktree-issue-61
   #62  8b1e40af  HITL  .claude/worktrees/issue-62  worktree-issue-62
@@ -519,9 +528,11 @@ it for a session that ran one command. It is for a human to look at, not for an 
 ## Rules
 
 - Dispatch only; never build a Slice in this session.
-- Never dispatch a Spec at Status `draft`. There is no override here — `/anchor-spec --skip-critique "<reason>"` is the recorded way past the Critique gate, and it is recorded in the Spec.
-- A Spec with no file warns rather than stops: its Slices dispatch as lone Slices do, §4 does not run for it, and §7 writes no Status. One warning per absent Spec, however many Slices name it.
-- `**Specs:** off` in the per-repo workflow file makes every Slice a lone Slice: no Status gate, no coverage check, no Status written, no warning about a Spec file, and the declaration named once in §6. Absent means `on`.
+- Never dispatch a Spec at Status `draft`. There is no override here: `/critique-spec --skip-critique "<reason>"` is the recorded way past the Critique gate, and it is recorded in the Spec.
+- Read every Status and Criterion through `spec.py read`, and write the Status only through `spec.py set-status`. Never grep or edit the Spec issue body for them.
+- A Parent that carries no Status line was never anchored, and warns rather than stops: its Slices dispatch as lone Slices do, §4 does not run for it, and §7 writes no Status. One warning per unanchored Spec, however many Slices name it.
+- A Parent whose body is a legacy `docs/specs/` pointer stops the run. A Spec exists there, and dispatching its Slices as lone Slices would skip its gates; `spec.py migrate {n}` brings it into the issue.
+- `**Specs:** off` in the per-repo workflow file makes every Slice a lone Slice: no Status gate, no coverage check, no Status written, no warning about an unanchored Parent, and the declaration named once in §6. Absent means `on`.
 - Never dispatch a Spec whose Criteria are not all owned by exactly one Slice, in either direction. Report every gap at once.
 - Classify HITL from `[manual]` tags and from nothing else. Never from a label, never from wording, and never by asking — the tag is the answer.
 - Warn at most once per Slice about observational Criteria carrying no tag, and dispatch it AFK regardless.
