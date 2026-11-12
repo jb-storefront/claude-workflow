@@ -31,8 +31,9 @@ Both `workflow@jb-workflow` and `mattpocock-skills@claude-plugins-official` shou
 marketplace is missing: run the first command above, then `claude plugin install
 mattpocock-skills@claude-plugins-official`.
 
-Already had `workflow` installed before 2.2.0 without Pocock's skills? `claude plugin marketplace
-update jb-workflow`, then `claude plugin update workflow@jb-workflow`.
+Upgrading an existing install? `claude plugin marketplace update jb-workflow`, then
+`claude plugin update workflow@jb-workflow`. [CHANGELOG.md](CHANGELOG.md) says what now blocks and
+what no longer does. Read its "Upgrading from 2.1.0" section if you are coming from 2.1.0 or earlier.
 
 ## Set up a repo
 
@@ -86,7 +87,24 @@ the repo is offered both plugins when they first trust the workspace:
 ```
 
 Everything not marked (Pocock) ships in this plugin, as do `/rebase-pr` and `/merge-pr` for the
-single-PR cases. A repo whose workflow file says `**Specs:** off` skips `/critique-spec`, and `/dispatch-slices` treats every Slice as a lone one.
+single-PR cases.
+
+**When to skip the Spec half:** when the behaviour is already settled and fits in one Slice per
+repository with ten Criteria or fewer, file it with `/create-bug` or `/create-feature` and start at
+`/dispatch-slices`. Everything from there on still runs, so skipping the Spec is not a way to skip
+the tests. A repository that keeps no Specs at all says so once with `**Specs:** off` in
+`docs/agents/workflow.md`: `/dispatch-slices` then treats every Slice as a lone one and runs no
+Spec gate.
+
+### How far this has been proven
+
+The per-Slice half has run on real pull requests in another repository: `/finalize-pr`,
+`/review-pr`, and the Copilot and Auto-fix handoff, and `/create-bug` and `/create-feature` have
+been dry-run against real cases. Every pull request here runs `./scripts/validate.sh`, which
+validates the plugin and marketplace manifests and runs the test suites for the scripts the skills
+call. **No Spec has yet gone through the whole loop**, from `/grill-with-docs` to the close-out
+that marks it `implemented`. Until one has, treat the Spec half as validated statically and not
+proven end to end.
 
 `/critique-spec` is best with Codex or Antigravity installed, so the doubt comes from another
 vendor. Neither is required, and neither is installed for you: `/setup-workflow` reports which
@@ -112,18 +130,12 @@ code.
 
 ## What a repo needs before the first fan-out
 
-`/setup-workflow` does all of this except the last two bullets. Listed here so you know what it
-did, or can do it by hand.
+Run `/setup-workflow` (see [Set up a repo](#set-up-a-repo)). It gitignores `.claude/worktrees/`,
+writes a `.worktreeinclude` when the repo has gitignored config a worktree would otherwise lack,
+commits the plugin block, writes `docs/agents/workflow.md`, copies the agent templates, and adds
+the pointer block to `CLAUDE.md`. Re-run it rather than editing those by hand.
 
-- **`.claude/worktrees/` in `.gitignore`.** That is where Claude Code puts them, and without the
-  ignore every worktree's files show up as untracked noise in your main checkout.
-- **A `.worktreeinclude`** if the project has gitignored config the slices need. A worktree is a
-  fresh checkout: `.env` and friends are not there unless this file copies them.
-
-  ```text
-  .env
-  .env.local
-  ```
+Two things it cannot do for you:
 
 - **Workspace trust accepted once.** Run `claude` in the repo and accept the dialog. Worktrees live
   inside the trusted checkout, so background sessions never ask again.
