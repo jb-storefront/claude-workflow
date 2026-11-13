@@ -61,9 +61,11 @@ Exit 2 → **stop** and relay its `✘` line: a gate that could not run has not 
 
 Keep `{.autofix.session}` for §5.
 
-### 2c. Copilot (soft gate)
+### 2c. Copilot and CI (soft gate)
 
 `.copilot` is [clean-predicate.py](../../scripts/clean-predicate.py)'s verdict on the same snapshot.
+It reads the checks as well as Copilot's threads, so a failing or running check shows up here as one
+of its reasons, and there is no separate CI step.
 
 - `clean` → proceed.
 - `pending` → **warn** with its reasons (a Copilot pass on its way, a running check) and ask: wait,
@@ -72,14 +74,7 @@ Keep `{.autofix.session}` for §5.
   Copilot pass on an older commit, or no pass at all. Ask: attempt anyway or abort? It is a warning,
   not a stop, so that a human can approve over a thread they have read and disagree with.
 
-### 2d. CI checks (soft gate)
-
-Inspect `statusCheckRollup`:
-- All `SUCCESS`/`NEUTRAL` (or empty) → proceed.
-- Any `FAILURE`/`ERROR` → **warn** (branch protection may block) and ask: attempt anyway or abort?
-- Any `PENDING`/`QUEUED` → **warn** and ask: wait, attempt, or abort?
-
-### 2e. Merge state
+### 2d. Merge state
 
 `gh pr view {pr_number} --json mergeStateStatus --jq '.mergeStateStatus'`:
 - `CLEAN` / `HAS_HOOKS` → proceed.

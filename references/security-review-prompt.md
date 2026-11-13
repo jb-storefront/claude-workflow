@@ -1,27 +1,33 @@
 # Security review prompt
 
-**Version:** 1
+**Version:** 2
 
 The prompt `/review-pr` sends, verbatim, to whichever entry of the Security reviewers list runs:
 `codex`, `google` or `claude` alike, so a security review reads the same whichever vendor produced
-it. Fill in `{pr_number}`, `{base}` and `{head}`; change nothing else. A change to the prompt
-bumps the version.
+it. Fill in `{pr_number}`, `{base}` and `{head}`; change nothing else. `{base}` is a git revision:
+`origin/{baseRefName}` for a review of the whole PR, or the last head a Ready `/review-pr` summary
+named, for a review of only the commits after it. A change to the prompt bumps the version.
 
 It is Anthropic's Claude Code security review, the prompt Claude Code's built-in `/security-review`
 runs, taken from
 [`anthropics/claude-code-security-review`](https://github.com/anthropics/claude-code-security-review)
 at `c19afa74097b892109a6598b94297280ce7d1beb`, `.claude/commands/security-review.md`, under the MIT
-licence below. It is used as is, apart from four changes that let it run on any vendor:
+licence below. It is used as is, apart from five changes that let it run on any vendor and on part
+of a PR:
 
 1. **The diff commands are run, not expanded.** The original inlines them with Claude Code's `!`
-   syntax against `origin/HEAD`. Here the reviewer runs them against `origin/{base}...{head}`,
-   the PR's own base, which `origin/HEAD` is not for a stacked PR. The frontmatter that granted
+   syntax against `origin/HEAD`. Here the reviewer runs them against `{base}...{head}`, where
+   `{base}` is the PR's own base, which `origin/HEAD` is not for a stacked PR, or the last
+   reviewed head. The frontmatter that granted
    those commands is gone with it, and the read-only rule it enforced is stated instead.
 2. **The filtering pass may run those git commands.** The original forbids the shell outright in
    that pass, which it could because the diff was already inlined.
 3. **No sub-tasks.** The original fans out to Claude Code sub-tasks. Codex and agy have none, and a
    Claude subagent cannot start one, so the same three steps run in one pass.
 4. **Sentinel lines at the end**, so `/review-pr` reads the counts rather than parsing prose.
+5. **"The complete diff" is the diff under review.** The original's "This contains all code changes
+   in the PR" is false for a review of the commits after the last reviewed head, so it says what
+   the range is instead.
 
 Everything else, including the original's numbering, is Anthropic's text.
 
@@ -34,11 +40,12 @@ This review is read-only. Do not edit, create, or delete any file, and do not ru
 
 Run these commands to see the change:
 
-FILES MODIFIED: `git diff --name-only origin/{base}...{head}`
-COMMITS: `git log --no-decorate origin/{base}..{head}`
-DIFF CONTENT: `git diff origin/{base}...{head}`
+FILES MODIFIED: `git diff --name-only {base}...{head}`
+COMMITS: `git log --no-decorate {base}..{head}`
+DIFF CONTENT: `git diff {base}...{head}`
 
-Review the complete diff. This contains all code changes in the PR.
+Review the complete diff. This contains every code change under review: the whole PR, or every
+commit since a head that was already reviewed.
 
 
 OBJECTIVE:

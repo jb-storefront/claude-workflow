@@ -11,6 +11,7 @@ CI. validate.sh does not call it, because it needs a PR to look at.
     test-review-pr-behaviour.py --repo gr4vy/gr4ce C5 451 --finding '#9'
     test-review-pr-behaviour.py --repo owner/repo S1 70 --finding "claude (opus)"
     test-review-pr-behaviour.py --repo owner/repo S2 70 --finding scripts/planted.py
+    test-review-pr-behaviour.py --repo gr4vy/gr4ce D1 452
 
 The comment shapes it reads are defined in CONTRACTS.md, under the /review-pr
 summary comment.
@@ -73,20 +74,19 @@ def verdict_of(review):
 
 
 def check_54_c1(pr, _):
-    """#54 C1 a passing PR: no code-reviewer section, /review-pr summary names the reviewer, PR ready."""
-    if not pr.finalize_reviews:
-        return False, "no /finalize-pr review on the PR"
-    fin = pr.finalize_reviews[-1]
-    if verdict_of(fin) != "Not blocking":
-        return False, f"latest /finalize-pr review is {verdict_of(fin)}"
-    if re.search(r"^###\s+Code-reviewer", fin["body"], re.M | re.I):
-        return False, "the /finalize-pr review still carries a code-reviewer section"
-    if re.search(r"^###\s+Spec drift", fin["body"], re.M | re.I):
-        return False, "the /finalize-pr review still carries a spec-drift section"
-    after = [c for c in pr.summaries if c["created_at"] >= fin["submitted_at"]]
-    if not after:
-        return False, "no /review-pr summary posted after the /finalize-pr review"
-    summary = after[-1]["body"]
+    """#54 C1 a passing PR: one comment, the /review-pr summary, carrying the Criteria and naming the reviewer; PR ready."""
+    if not pr.summaries:
+        return False, "no /review-pr summary on the PR"
+    summary = pr.summaries[-1]["body"]
+    # A Not blocking /finalize-pr posts nothing of its own: its report rides in the summary.
+    own = [r for r in pr.finalize_reviews if r.get("commit_id") == pr.head]
+    if own:
+        return False, f"/finalize-pr posted its own review on the head ({verdict_of(own[-1])})"
+    criteria = section(summary, "Criteria")
+    if not criteria or not re.search(r"^- (verified|weak|manual|unverified)\s", criteria, re.M):
+        return False, "the summary carries no Criteria report"
+    if not (field(summary, "Criteria") or "").startswith("proven on this head"):
+        return False, f"the Criteria line is {field(summary, 'Criteria')!r}"
     reviewed = field(summary, "Head")
     if not reviewed or not pr.head.startswith(reviewed):
         return False, f"the /review-pr summary reviewed {reviewed}, head is {pr.head}"
@@ -147,8 +147,10 @@ def check_54_c4(pr, _):
     if not any(o == "Ready" and h and not pr.head.startswith(h) for h, o in zip(heads, outcomes)):
         return False, "no earlier summary marked the PR ready on a different commit"
     on_head = [r for r in pr.finalize_reviews if r.get("commit_id") == pr.head]
-    if on_head:
+    if on_head or (field(pr.summaries[-1]["body"], "Criteria") or "").startswith("proven on this head"):
         return False, "/finalize-pr also ran on the new head, so /review-pr did not run on its own"
+    if section(pr.summaries[-1]["body"], "Criteria") is not None:
+        return False, "a run on its own copied a Criteria report proven on another commit"
     # Whatever the new review decided, the PR's state must agree with it.
     if pr.draft != (outcomes[-1] == "Draft"):
         return False, f"latest summary says {outcomes[-1]} but the PR's draft is {pr.draft}"
@@ -220,8 +222,25 @@ def check_security_blocks(pr, finding):
     return True, "PR is a draft, blocking security finding named"
 
 
+def check_delta_scope(pr, _):
+    """D1 a push after a Ready summary: the next summary reviews only the commits since that summary's head."""
+    heads = [field(c["body"], "Head") for c in pr.summaries]
+    outcomes = [REVIEW_HEAD.match(first_line(c["body"])).group(1) for c in pr.summaries]
+    if len(heads) < 2:
+        return False, f"{len(heads)} /review-pr summaries, expected at least two"
+    if not heads[-1] or not pr.head.startswith(heads[-1]):
+        return False, f"latest summary reviewed {heads[-1]}, head is {pr.head}"
+    earlier = [h for h, o in zip(heads[:-1], outcomes[:-1]) if o == "Ready"]
+    if not earlier:
+        return False, "no earlier Ready summary to review from"
+    scope = field(pr.summaries[-1]["body"], "Scope")
+    if scope != f"since {earlier[-1]}":
+        return False, f"Scope is {scope!r}, expected 'since {earlier[-1]}'"
+    return True, f"Scope {scope}"
+
+
 CHECKS = {f"C{n}": globals()[f"check_54_c{n}"] for n in range(1, 6)}
-CHECKS.update(S1=check_security_entry, S2=check_security_blocks)
+CHECKS.update(S1=check_security_entry, S2=check_security_blocks, D1=check_delta_scope)
 
 
 def main():

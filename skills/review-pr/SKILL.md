@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Run the local code review and the security review on a pull request with fresh-context reviewers and the spec-drift question, mark the PR ready when nothing blocks, hand it to Copilot and a cloud Auto-fix session, and post one summary comment. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
+description: Run the local code review and the security review on a pull request with fresh-context reviewers and the spec-drift question, reviewing only the commits since the last Ready review when one passed, mark the PR ready when nothing blocks, hand it to Copilot and a cloud Auto-fix session, and post one summary comment that carries /finalize-pr's Criteria when it handed off. The only skill that marks a PR ready. Use when the user says "/review-pr", or when /finalize-pr hands off a Not blocking PR. Not for addressing or replying to review comments on a PR.
 ---
 
 # Review PR
@@ -20,9 +20,17 @@ before it merges.
 
 It runs two ways, and they are the same run:
 
-- **Hand-off.** `/finalize-pr` invokes it when its own verdict is Not blocking, with the PR number.
+- **Hand-off.** `/finalize-pr` invokes it when its own verdict is Not blocking, with the PR number
+  and the file holding its Criteria report. `/finalize-pr` posts no comment of its own then: this
+  skill's summary carries the Criteria, so a reviewer reads one comment per run, not two.
 - **On its own.** After someone pushes to a PR, `/review-pr` reviews the new head and posts a new
   summary. Every run reviews again; nothing is skipped because an earlier summary passed.
+
+**What it reviews.** The first review of a PR reviews all of it. Once a summary has said `Ready`,
+everything up to the head it named was reviewed whole and passed, so a later run reviews only the
+commits after that head: an Auto-fix push of three lines gets a review of three lines, with the
+whole PR there for context, rather than a second full review that repeats the first. §1 decides
+which, and the summary's `Scope:` line says which ran.
 
 Run it **inline**, in the session that owns the branch. Never background it or hand it to a
 detached agent: the session that can fix what the review finds is the one that should read it.
@@ -31,6 +39,13 @@ detached agent: the session that can fix what the review finds is the one that s
 
 `$ARGUMENTS`: a PR number (`42` or `#42`). If empty, use the current branch's PR:
 `gh pr list --head {branch} --json number --limit 1`. No PR → **stop**: there is nothing to review.
+
+Two optional flags:
+
+- `--criteria {path}`: the Criteria report `/finalize-pr` wrote for this head. Only `/finalize-pr`
+  passes it. §8 puts it in the summary.
+- `--full`: review the whole PR even when §1 would review only the newest commits. For a person who
+  wants a second full look, such as after a large rework.
 
 ## 1. Pre-flight
 
@@ -51,6 +66,31 @@ git fetch origin {headRefName} {baseRefName} {default}
   check again. Otherwise **stop**: a checkout on another branch, unpushed commits, or a stale checkout
   all mean a reviewer reading the working tree would read code that is not the PR. Say which
   (`git status -sb` shows ahead/behind) and what to run. Return the PR to draft first, as below.
+
+### The scope
+
+```bash
+python3 <this skill dir>/../../scripts/merge-gate.py --pr {pr_number}
+```
+
+`{since}` = `.last_ready.head`, the head the newest `Ready` summary named. Exit 2 → **stop**, as for
+any read that failed: a scope this skill could not work out is not a full review by default, it is a
+run that did not happen.
+
+Review only the commits after `{since}` when every one of these holds:
+
+- `{since}` is not null. A `Draft` summary never sets it, because its head had blocking findings.
+- `{since}` is not `{head}`. A re-run on a reviewed head reviews it whole again.
+- `git merge-base --is-ancestor {since} {head}` succeeds. A rebase or a force-push rewrote what was
+  reviewed, and the old head says nothing about the new commits.
+- `--full` was not passed.
+
+Then `{scope}` is `since {since}`, `{range}` is `{since}...{head}`, and `{security_base}` is
+`{since}`. Otherwise `{scope}` is `full`, `{range}` is `origin/{baseRefName}...{head}`, and
+`{security_base}` is `origin/{baseRefName}`.
+
+`/finalize-pr` handing off does not force a full review. Its Criteria are re-proven on every run it
+makes; the code a Ready review already passed has not changed.
 
 **A stop is never a pass.** Wherever this skill stops before §6 (a checkout that is not the PR's
 head, an unusable Security reviewers list, a Spec list `gh` could not read, a code reviewer that returned no sentinels, or a security
@@ -116,7 +156,7 @@ no Slice.
    Spec still in progress is being built, not drifted from. Exit 2 means `gh` failed: **stop**, and a
    stop is never a pass (§1). A list that failed to load, read as no Specs, would let every drift
    through unasked.
-2. Take the changed paths: `gh pr diff {pr_number} --name-only`.
+2. Take the changed paths: `git diff --name-only {range}`.
 3. Keep a Spec when a word of its title, or a `CONTEXT.md` **Language** term its Criteria use,
    appears in a changed path. Read each candidate's Criteria with
    `python3 <this skill dir>/../../scripts/spec.py read {spec} --repo {tracker}`; exit 2 there
@@ -139,6 +179,12 @@ agent on purpose: the session that wrote the code does not review it. Prompt:
 ```
 Review PR #{pr_number}.
 
+{only when {scope} is not full:}
+The PR was reviewed whole at {since} and nothing blocked. Review only the commits after it:
+`git diff {since}...{head}`. Read `gh pr diff {pr_number}` and the code around the change for
+context, and report a finding only on a line those commits change, or on code elsewhere that
+they break. Do not report what the earlier review already saw.
+
 These Specs describe behaviour that already ships:
 
 {one line per candidate: `#60 Loyalty earn and burn`}
@@ -152,6 +198,11 @@ spec-drift: #{spec} | {the behaviour} | {path:line}
 
 These drift findings are advisory. Do not count them in CRITICAL_COUNT or HIGH_COUNT, and do
 not let them change VERDICT.
+
+Also walk the diff for these AI-debris patterns. A pattern rated Blocking is a High finding,
+and one rated Not blocking is Medium or Low:
+
+{the text of references/ai-debris.md from its first `##` heading to the end}
 
 After your review report, append these exact sentinel lines at the very end of your response (outside of any markdown code blocks):
 
@@ -168,6 +219,12 @@ HIGH_COUNT: <number>
 VERDICT must be "approved" only if both counts are 0.
 ```
 
+The AI-debris patterns come from
+[../../references/ai-debris.md](../../references/ai-debris.md), pasted in rather than pointed at:
+the agent runs in the project's repository, where the plugin's files are not. `/finalize-pr` no
+longer looks for debris, because the session that wrote the diff is the wrong one to, so this prompt
+is the only place it is checked.
+
 Parse the sentinels. If absent, **stop** and report the malformed response. Post nothing, and
 return a ready PR to draft as §1 describes: a review with no verdict is a review that did not
 happen.
@@ -178,8 +235,10 @@ there is nothing to drift from answers differently from a reviewer told nothing 
 ### With no project code-reviewer agent
 
 Invoke Pocock's `code-review` skill through the Skill tool, `skill: "mattpocock-skills:code-review"`,
-with the merge-base as its fixed point: `git merge-base origin/{default} HEAD`. Name the candidate
-Specs above as its spec source, and pass the same drift instruction. Ask it to grade every **Standards**
+with `{since}` as its fixed point when `{scope}` is not full, and otherwise the merge-base:
+`git merge-base origin/{default} HEAD`. Name the candidate
+Specs above as its spec source, and pass the same drift instruction and the same AI-debris
+patterns, as **Standards** findings graded the way the prompt above grades them. Ask it to grade every **Standards**
 finding Critical, High, Medium or Low: its own brief only separates hard violations from judgement
 calls, and an ungraded finding cannot block, so without the grades the fallback always approves.
 
@@ -214,7 +273,7 @@ What those rules leave to this skill:
 
 **One prompt, for every vendor.** Read
 [../../references/security-review-prompt.md](../../references/security-review-prompt.md), take the
-text under its `## Prompt` heading, and fill in `{pr_number}`, `{base}` (`{baseRefName}`) and
+text under its `## Prompt` heading, and fill in `{pr_number}`, `{base}` (`{security_base}`) and
 `{head}`. Change nothing else. It is Anthropic's Claude Code security review, adapted only so that it
 runs the same on any vendor, so whichever entry runs, the review asks the same questions of the same
 diff and grades on the same scale.
@@ -350,6 +409,16 @@ returned nothing. The `Copilot:` and `Auto-fix:` lines are what §7 read back: a
 shows and a session id `claude --cloud` printed, never a step that was attempted. When Copilot did not
 run on a Ready PR, say so on the line under the heading, before anything else.
 
+The `Scope:` line is §1's `{scope}`, so a reader knows whether a `Ready` covers the whole PR or
+only the commits after an earlier `Ready`.
+
+The `Criteria:` line and the `### Criteria` section come from `--criteria`. With it, paste the
+report `/finalize-pr` wrote, unchanged, under `### Criteria`, and the `Criteria:` line gives its
+counts and says it was proven on this head. Without it (a run on its own, after a push), there is no
+new proof: the `Criteria:` line names the newest summary that carried a `### Criteria` section and
+the head it was proven on, and the section is left out. Never copy an earlier Criteria report into
+this summary; it was proven on a different commit.
+
 Every blocking finding, from the code reviewer and the security reviewer alike, goes under
 `### Blocking findings` with its `path:line`, so the person picking up a Draft PR does not have to
 open the full reports to learn what stopped it. Put each reviewer's whole report, sentinel lines
@@ -371,6 +440,8 @@ reviewed, and the history of which commit passed and which did not is the point.
 PR:       #{pr_number} — {pr_title}
 URL:      {pr_url}
 Head:     {head}
+Scope:    {full PR | the commits since {since}}
+Criteria: {proven on this head by /finalize-pr: {V} verified, {W} weak, {M} manual, {U} unverified | not re-proven; last proven on {sha}}
 Reviewer: {name} — {verdict}, {C} Critical, {H} High
 Security: {vendor} ({model}) — {H} High, {M} Medium, {L} Low
           {each entry skipped, and why: unavailable, or returned nothing}
@@ -407,7 +478,10 @@ Next: {Auto-fix is answering Copilot; when it posts "## Auto-fix — Clean", re-
 - The `Security:` line names the entry that ran, never one that was skipped or returned nothing.
 - Spec drift is advisory and never blocks.
 - Every run reviews the current head and posts a new summary. Do not skip a review because an
-  earlier summary passed.
+  earlier summary passed. A run after a `Ready` summary reviews the commits since its head, never
+  less, and a rewritten history or `--full` reviews the whole PR.
+- When `/finalize-pr` handed off, its Criteria report goes in this summary, unchanged. Never carry an
+  earlier run's Criteria report into a later summary.
 - A GitHub write that returns success is not evidence it took effect. §6, §7 and §8 say what to read back, and §8 never claims a state §6 or §7 did not read back.
 - Read the Slice from the repository `closingIssuesReferences` names, with `--repo`.
 - Do not modify source files. Fixing what the review found is the session's next step, not this

@@ -1,6 +1,6 @@
 # AI-debris pattern catalog
 
-Patterns that signal an AI agent overshot the task or worked around the absence of real context. Use this catalog during step 10 of `/finalize-pr`. Each entry: what to look for in the diff, why it's a flag, severity.
+Patterns that signal an AI agent overshot the task or worked around the absence of real context. `/review-pr` hands this catalog to the code reviewer, which runs in a fresh context: the session that wrote the diff is the worst placed to see its own debris. Each entry: what to look for in the diff, why it's a flag, severity. A pattern rated **Blocking** is a High finding; **Not blocking** is Medium or Low.
 
 ---
 
