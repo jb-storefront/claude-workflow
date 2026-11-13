@@ -156,6 +156,23 @@ def test_no_autofix_line_is_no_session():
     return is_(gate(snap)["autofix"]["session"], None, "autofix.session")
 
 
+def test_last_ready_names_the_newest_ready_summary_past_a_later_draft():
+    """last_ready is the newest Ready summary's head, even when a Draft summary came after it"""
+    snap = snapshot(
+        comments=[
+            comment(summary("Ready", OLD), "2026-11-01T09:00:00Z"),
+            comment(summary("Draft", HEAD), "2026-11-01T10:40:00Z"),
+        ]
+    )
+    return is_(gate(snap)["last_ready"]["head"], OLD[:7], "last_ready.head")
+
+
+def test_no_ready_summary_is_no_last_ready():
+    """with only Draft summaries there is no last_ready head, so the next review is a full one"""
+    snap = snapshot(comments=[comment(summary("Draft", OLD), "2026-11-01T09:00:00Z")])
+    return is_(gate(snap)["last_ready"]["head"], None, "last_ready.head")
+
+
 def test_copilot_is_judged_by_the_clean_predicate():
     """an unresolved Copilot thread makes copilot not-clean, with the thread named"""
     thread = {

@@ -40,8 +40,16 @@ the ADRs closed._
   names.
 - **Tests.** Tests that assert on copy, labels, CSS classes or DOM layout instead of behaviour; a
   test weakened to pass; a bug fixed with no failing test written first.
+- **AI debris and scope creep.** `/review-pr` pastes the patterns into your prompt, each with the
+  severity it carries. Nothing earlier in the workflow looks for them.
 - **Spec drift.** Behaviour the diff changes that an implemented Spec describes. Report it; never
   block on it.
+
+The quality gates (lint, typecheck, format, tests) are not yours. `/finalize-pr` held the PR to
+them, from CI where CI runs them, before this review was dispatched. Do not run them, and do not
+report anything a linter or type checker owns. The security review is not yours either: `/review-pr`
+runs a separate security reviewer on the same head. Review this project's own security invariants,
+the ones its ADRs record, because that reviewer does not know them.
 
 ## What not to do
 

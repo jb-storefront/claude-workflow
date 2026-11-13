@@ -550,6 +550,10 @@ let `/acceptance-tests` write them back, and the step starts working.
 `/finalize-pr` reports every Criterion the Slice owns as exactly one of four states. The state is
 what was proven, not what was attempted.
 
+The report is posted as its own review comment only when it blocks. When it does not, `/finalize-pr`
+hands it to `/review-pr`, whose summary carries it under `### Criteria`, so each run leaves one
+comment for a reviewer to read.
+
 | State | Rule |
 | --- | --- |
 | **verified** | A test whose name carries the Criterion's id exists, and the test gate passed. For a `[command]` Criterion: its command exited 0 on the pull request's head |
@@ -635,14 +639,14 @@ than repaired:
 | A `[command]` Criterion with no `Command:` line | `unverified`, with `no command named` as its evidence |
 | A `[manual]` Criterion whose check is a command | `ⓘ Tag: #60 C2 is [manual] and its check is a command a session can run. Retag it [command]`. It is still reported `manual` |
 
-The `/finalize-pr` review comment carries no code-review and no spec-drift section. Those belong to
+The `/finalize-pr` report carries no code-review, AI-debris or spec-drift section. Those belong to
 `/review-pr`, which `/finalize-pr` hands a Not blocking PR to.
 
 ## The `/review-pr` summary comment
 
 `/review-pr` posts one issue comment per run, never edits an earlier one, and is the only skill that
-marks a PR ready. The first line, the `Head:`, `Reviewer:`, `Security:`, `Copilot:` and `Auto-fix:`
-lines, and the `###` headings are read by machines; keep their spelling. `merge-gate.py` reads the
+marks a PR ready. The first line, the `Head:`, `Scope:`, `Criteria:`, `Reviewer:`, `Security:`,
+`Copilot:` and `Auto-fix:` lines, and the `###` headings are read by machines; keep their spelling. `merge-gate.py` reads the
 first line, `Head:` and `Auto-fix:` to decide whether a head was reviewed and which session to stop.
 
 ```markdown
@@ -651,10 +655,16 @@ first line, `Head:` and `Auto-fix:` to decide whether a head was reviewed and wh
 {Only when Copilot did not run on a Ready PR: "Copilot did not run: {why}."}
 
 Head: `{the reviewed head commit, first 7}`
+Scope: {full | since {the last Ready summary's head, first 7}}
+Criteria: {proven on this head by /finalize-pr: {V} verified, {W} weak, {M} manual, {U} unverified | not re-proven on this head; last proven on {sha, first 7}}
 Reviewer: `{the project agent's frontmatter name, or code-review}` — {approved | changes_requested}, {C} Critical, {H} High
 Security: `{vendor} ({model})` — {H} High, {M} Medium, {L} Low
 Copilot: {requested by the repository's ruleset | requested by /review-pr | did not run: {why} | not requested: Draft}{; later passes: on push | ; later passes: none, the repository does not review on push}
 Auto-fix: {[session_…](https://claude.ai/code/session_…) — {started | already watching} | not started: {why} | not started: Draft}
+
+### Criteria
+{only when /finalize-pr handed off on this head: its report, unchanged, from its first line after the
+heading: the Criteria list, the ⓘ and ⚠ lines, the Rule: line, and ### Not verified}
 
 ### Blocking findings
 - High — `src/auth/client.ts:88` — the token is logged in plain text
@@ -679,8 +689,15 @@ Auto-fix: {[session_…](https://claude.ai/code/session_…) — {started | alre
 The `Security:` line names the entry of the Security reviewers list that produced the security
 review, never one that was skipped or returned nothing.
 
+`Scope: full` means both reviewers read the whole PR against its base. `Scope: since {sha}` means
+they read only the commits after `{sha}`, the head the newest `Ready` summary named, with the whole
+PR available as context. A `Draft` summary's head is never a `since`: its head had blocking
+findings, so the next review starts again from the last head that passed whole. A rebase or a
+force-push that drops `{sha}` from the history makes the next review a full one.
+
 `Ready` means the reviewer named on the `Reviewer:` line and the security reviewer named on the
-`Security:` line both reviewed the commit on the `Head:` line, nothing either found blocks, and the
+`Security:` line both reviewed the commit on the `Head:` line, over the range the `Scope:` line
+names, nothing either found blocks, and the
 PR read back as ready before the comment was posted. It does not mean Copilot is clean: Copilot
 reviews a PR only once it is ready, and the Auto-fix session answers it after this comment is
 posted. A later push needs a later summary: an earlier `Ready` says nothing about a commit it did

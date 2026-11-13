@@ -21,6 +21,9 @@ Prints JSON and exits 0:
              stale    the latest summary names an earlier commit
              blocked  the latest summary names the head and is Draft
              none     /review-pr never posted a summary here
+  last_ready {head, summary_url}   the newest Ready summary's head, or nulls.
+             /review-pr reviews only the commits after it, because everything
+             up to it was reviewed whole and passed.
   autofix    {session}   the newest summary's Auto-fix session id, or null
   copilot    clean-predicate.py's verdict, unchanged
 
@@ -74,6 +77,17 @@ def reviewed(snap, found):
     return {"state": state, "head": head, "summary_url": latest.get("url")}
 
 
+def last_ready(found):
+    # A Draft summary's head had blocking findings, so it is never a point to
+    # review from; only a head a review passed whole is.
+    for c in reversed(found):
+        if HEADING.match(first_line(c["body"])).group(1) == "Ready":
+            m = HEAD_LINE.search(c["body"])
+            if m:
+                return {"head": m.group(1), "summary_url": c.get("url")}
+    return {"head": None, "summary_url": None}
+
+
 def autofix(found):
     # A re-run of /review-pr reuses a live session and says so, but a summary
     # written before Auto-fix existed has no line, so look back past it.
@@ -88,6 +102,7 @@ def judge(snap):
     found = summaries(snap)
     return {
         "reviewed": reviewed(snap, found),
+        "last_ready": last_ready(found),
         "autofix": autofix(found),
         "copilot": clean_predicate.judge(snap),
     }

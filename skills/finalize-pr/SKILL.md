@@ -1,11 +1,11 @@
 ---
 name: finalize-pr
-description: Drive a Slice PR to ready-for-human-review from its worktree. Reads the linked Slice and its Spec from whichever repository the closing reference names, auto-detects PM, runs quality gates, runs the command each [command] Criterion names, captures the Frames the repository declares for its [manual] Criteria, reports every Criterion as verified, weak, manual or unverified, dispatches the PR-writer agent, performs AI-discipline checks, ticks verified Criteria on the issue, posts the review via `gh pr review --comment`, and hands a Not blocking PR to /review-pr, which reviews the code and is the only skill that marks it ready. Use when the user says "/finalize-pr", "submit PR", "ready for review", or finishes a TDD cycle on a Slice.
+description: Drive a Slice PR to ready-for-human-review from its worktree. Reads the linked Slice and its Spec from whichever repository the closing reference names, pushes, reads the quality gates from CI (running them locally only where no CI does), runs the command each [command] Criterion names, captures the Frames the repository declares for its [manual] Criteria, reports every Criterion as verified, weak, manual or unverified, dispatches the PR-writer agent, ticks verified Criteria on the issue, posts the review via `gh pr review --comment`, and hands a Not blocking PR to /review-pr, which reviews the code and is the only skill that marks it ready. Use when the user says "/finalize-pr", "submit PR", "ready for review", or finishes a TDD cycle on a Slice.
 ---
 
 # Finalize PR
 
-Prove what a Slice's PR claims: a review comment that says what was actually proven, and ticked
+Prove what a Slice's PR claims: a report that says what was actually proven, and ticked
 Criteria on the Slice. When nothing here blocks, hand the PR to `/review-pr`, which runs the code
 review and is the only skill that marks a PR ready. This skill never does.
 
@@ -44,7 +44,7 @@ Sections a Slice is missing are skipped rather than fatal, with the exceptions �
   `{owner}` and `{repo}` are **literal** — `gh api` fills them from the current repo. Pull requests
   are issues, so that is the right endpoint. The read-back is there because GitHub silently ignores
   assignees without push access. Non-fatal here (the PR already exists, so nothing downstream
-  depends on the assignee), but if the read-back comes back without `{gh_user}`, say so in the §15
+  depends on the assignee), but if the read-back comes back without `{gh_user}`, say so in the §14
   summary rather than only in passing.
 - Print a one-line pre-flight summary.
 
@@ -59,7 +59,7 @@ gh pr view {pr_number} --json closingIssuesReferences \
 gh issue view {number} --repo {owner}/{repo} --json title,body,labels
 ```
 
-Carry that `{owner}/{repo}` through every later `gh issue` call in this skill, §12 included. A Slice
+Carry that `{owner}/{repo}` through every later `gh issue` call in this skill, §11 included. A Slice
 tracked in a backend repository and built in the front end's is normal, and a bare `gh issue view
 53` reads whatever issue 53 is in the repository holding the pull request: a different Slice, or
 nothing. `CONTRACTS.md` has the rule and why assuming is the worse of the two failures.
@@ -67,13 +67,13 @@ nothing. `CONTRACTS.md` has the rule and why assuming is the worse of the two fa
 Parse, per `CONTRACTS.md`:
 
 - `## Parent` → `{spec_issue}`, or absent on a lone Slice
-- `## Acceptance criteria` → the Slice's Criteria, one per checkbox, as `{ index, id, tag, command, text, checked }`. `tag` is `manual`, `command` or none. Track index positions for ticking in §12.
+- `## Acceptance criteria` → the Slice's Criteria, one per checkbox, as `{ index, id, tag, command, text, checked }`. `tag` is `manual`, `command` or none. Track index positions for ticking in §11.
 - `## References for context` → repo-relative paths
 
 If no issue is linked, skip parsing and note in the review comment that no Slice was found.
 
 If GitHub reports no linked issue, parse the PR body for `Closes|Fixes|Resolves #(\d+)` —
-`/start-issue` writes `Closes #{n}` as its first line. Note in the §15 summary when the link came
+`/start-issue` writes `Closes #{n}` as its first line. Note in the §14 summary when the link came
 from the body rather than from GitHub's own linkage, since a hand-edited body could have dropped it.
 
 ### The id on each checkbox
@@ -88,8 +88,8 @@ from the body rather than from GitHub's own linkage, since a hand-edited body co
 
 The third case is a Slice written before Criterion ids existed, or written by hand without them. It
 is not an error and it is not a free pass: an uncited checkbox is still a Criterion and still runs
-the §10 gate. Having no id, no test can carry it, so it can reach only `weak` or `unverified`,
-unless it is `[command]`, whose proof is its command and needs no id. Say in §13 and §15 that the
+the §9 gate. Having no id, no test can carry it, so it can reach only `weak` or `unverified`,
+unless it is `[command]`, whose proof is its command and needs no id. Say in §12 and §14 that the
 Slice carries no ids, because that, and not the missing test, is the thing to fix.
 
 ### The tag and the command
@@ -103,13 +103,13 @@ Criterion's command is the backticked command on its `Command:` line:
 | On a lone Slice | The checkbox itself, after `Command:` |
 
 `CONTRACTS.md` has the grammar. A `[command]` Criterion with no `Command:` line has no command, and
-§10 reports it `unverified` with `no command named`. Never compose one from the Criterion's wording.
+§9 reports it `unverified` with `no command named`. Never compose one from the Criterion's wording.
 
 ### Read the Slice, never repair it
 
-This skill writes exactly one thing to the Slice: §12's ticks. It never edits a Criterion's text,
+This skill writes exactly one thing to the Slice: §11's ticks. It never edits a Criterion's text,
 id or tag, and never adds ids to a Slice that has none. Each Criterion is held to the tag it carries
-on this run. When something looks wrong, record it for the `ⓘ` lines in §13 and the warnings in §15
+on this run. When something looks wrong, record it for the `ⓘ` lines in §12 and the warnings in §14
 and carry on:
 
 - The Slice's checkboxes carry no ids.
@@ -159,13 +159,31 @@ What `spec.py` exits with decides the rest:
 
 Read each file listed in `## References for context` (e.g., `CONTEXT.md`, area `CLAUDE.md`, ADRs). Skip silently when a path doesn't exist.
 
-## 4. Auto-rebase check
+## 4. Push, and the merge state
 
-`gh pr view {pr_number} --json mergeStateStatus --jq '.mergeStateStatus'`. If `BEHIND`, **stop** and tell the user to run `/rebase-pr` first, then re-run `/finalize-pr`. (Single explicit pause point — auto-invoke is intentionally deferred.)
+`git push origin {branch}`. Stop on failure. Push first, so every check below reads the head this
+skill is reporting on: a CI result for an older commit proves nothing about this one.
+
+`{head}` = `git rev-parse HEAD`, which must now equal the PR's `headRefOid`.
+
+`gh pr view {pr_number} --json mergeStateStatus --jq '.mergeStateStatus'`:
+
+- `DIRTY` → **stop**: the branch conflicts with its base, and GitHub runs no `pull_request` checks
+  on a PR it cannot merge. Run `/rebase-pr`, then re-run `/finalize-pr`.
+- `BEHIND` → carry on, and say so in §14. A `pull_request` workflow tests the PR merged into its
+  current base, so being behind does not make CI's verdict stale. `/merge-pr` warns about it again
+  before the merge, which is where it matters.
 
 ## 5. Quality gates
 
-Auto-detect the **toolchain** from a lockfile at the repo root, first match wins:
+**When CI runs the project's checks, CI is the gate.** If `.github/workflows/` holds a workflow that
+runs on `pull_request` and runs the project's lint, typecheck, format or tests, do not run them
+here: §6 reads every check on `{head}`, and that one read covers the quality gates and the test gate
+together. Running them here too proves nothing CI does not, and CI is the run the merge waits on.
+Still detect the toolchain below, because §6's Seam question reads it.
+
+Only when no CI runs them, run the gates here. Auto-detect the **toolchain** from a lockfile at the
+repo root, first match wins:
 
 | Lockfile | Toolchain | Manifest that declares the gates |
 | --- | --- | --- |
@@ -195,26 +213,26 @@ configures its tool, and report the rest as skipped.
 because they are one tool reading one config. `[tool.ruff.lint]` implies `[tool.ruff]`.
 
 Report each gate as run, skipped, or failed. A gate that is skipped because the manifest does not
-configure it must say so in the §15 summary — a silently-absent typecheck reads as a passing
+configure it must say so in the §14 summary — a silently-absent typecheck reads as a passing
 typecheck, which is how this gate went unnoticed for an entire project.
 
 **No lockfile matched the table.** Do not skip quietly. A toolchain this skill was never taught is
 a gap in the skill, and it looks identical to a clean gate run unless it is named. Record it and
-surface it in §15 as `Gates: not run — unrecognised toolchain ({what was found at the root})`, then
+surface it in §14 as `Gates: not run — unrecognised toolchain ({what was found at the root})`, then
 proceed: §6 still has CI, which is where the gates actually run for a project like this.
 
 Any failure → **stop** with the error output. Re-running after fixes is idempotent.
 
 ## 6. Test gate (conditional)
 
-Record the outcome as one of **passed**, **failed**, or **did not run**. §10 reads it, and the three
+Record the outcome as one of **passed**, **failed**, or **did not run**. §9 reads it, and the three
 are not interchangeable there.
 
 ### Is there a test Seam?
 
 `CONTEXT.md` defines a **Seam** as the public boundary a test observes behaviour at. Asked of a whole
 repository rather than of one behaviour, it becomes: can this skill run a test here at all? Record
-the answer as **present** or **absent**, with the reason. §11 reads it to decide what a `weak`
+the answer as **present** or **absent**, with the reason. §10 reads it to decide what a `weak`
 Criterion costs.
 
 One question settles it: **would the local branch below have a command to run?** If it names a test
@@ -237,23 +255,27 @@ the author's to fix:
   does run its tests somewhere this skill cannot see reads here as one that does not run them at
   all. Name what was found at the root, the same as §5 does.
 
-The second reason is the weaker of the two, and §13 prints it for that reason: a human who knows the
+The second reason is the weaker of the two, and §12 prints it for that reason: a human who knows the
 repository runs tests can then see that this skill did not find them.
 
 If `.github/workflows/` exists with at least one workflow file that runs the project's automated
 checks:
 
-- `gh pr view {pr_number} --json statusCheckRollup`
-- All `SUCCESS`/`NEUTRAL` → **passed**. Record the CI evidence and proceed.
-- Any `PENDING`/`QUEUED` → warn and ask: wait, proceed, or abort? Proceeding records **did not run**,
-  because a check still queued has proven nothing.
-- Any `FAILURE`/`ERROR` → **failed**, and **stop**.
+- `gh pr view {pr_number} --json headRefOid,statusCheckRollup`. `headRefOid` must equal `{head}`
+  (§4 pushed it); a rollup for any other commit is not this head's.
+- All `SUCCESS`/`NEUTRAL` → **passed**, for the test gate and for every §5 gate CI runs. Record the
+  check names as the evidence and proceed.
+- Any `PENDING`/`QUEUED` → wait for them: `gh pr checks {pr_number} --watch`. A check still queued
+  has proven nothing, and §4 has just pushed, so it is the normal state here. A wait that times out
+  → ask: keep waiting, or abort? Never proceed on a pending check.
+- Any `FAILURE`/`ERROR` → **failed**, and **stop** with the failing check's name and log URL. This
+  is §5's gate failing as much as the test gate.
 
 Otherwise, run the test gate locally for the toolchain §5 detected:
 
 - Node → `{pm} run test` (note: for bun+vitest, this is `bun run test`, not `bun test`). No `test` script → **did not run**.
 - `uv` → `uv run pytest -q`, when `pyproject.toml` has `[tool.pytest.ini_options]`. Otherwise → **did not run**.
-- No toolchain detected → **did not run**, and say why in §15, the same as §5.
+- No toolchain detected → **did not run**, and say why in §14, the same as §5.
 
 Failure → **stop**.
 
@@ -261,10 +283,10 @@ Failure → **stop**.
 
 Every `[command]` Criterion from §2 gets one outcome: **passed** with its exit code and the head it
 ran on, **failed** with the exit code and the first lines that say why, or **not run** with the
-reason. §10 reads it. A failure here does not stop the skill: it makes the Criterion `unverified`,
-and §11 blocks on that with the rest of the evidence in the comment.
+reason. §9 reads it. A failure here does not stop the skill: it makes the Criterion `unverified`,
+and §10 blocks on that with the rest of the evidence in the comment.
 
-`{head}` = `git rev-parse --short HEAD`, after confirming it matches the PR's `headRefOid`.
+`{head}` is §4's, shortened to seven characters where it is printed.
 
 **CI first.** A CI check counts when the workflow file behind it has a step whose `run:` is the
 Criterion's command, and the check ran on `{head}`. `SUCCESS` → passed, citing the check's name and
@@ -286,30 +308,26 @@ run URL. Anything else, or no such check → run it here.
 
 A `[command]` Criterion with no command (§2) → **not run**: `no command named`.
 
-## 7. Push
-
-`git push origin {branch}`. Stop on failure.
-
-## 8. Capture the Frames
+## 7. Capture the Frames
 
 Run `/frames {pr_number}`. It reads `docs/agents/frames.md`, serves the built application on this
 Slice's own preview port, captures one Frame per declared `[manual]` Criterion and publishes each to
 the `ui-evidence` branch of this repository. `CONTRACTS.md` has the Frame, its name and where it
 lands; the skill has the procedure, and this step does not restate either.
 
-Before §9, because the PR body carries the Frames and a body written first would not have them.
+Before §8, because the PR body carries the Frames and a body written first would not have them.
 
 Keep what it returns, per Criterion: `captured` with a filename and a URL, `MISSING` with the reason
 it failed, or `no frame` where the manifest declares none. Three outcomes are not failures of this
-step and are reported in §15 rather than stopping it:
+step and are reported in §14 rather than stopping it:
 
 - The repository declares no Frames.
 - The Slice owns no `[manual]` Criterion.
 - The Slice's Criteria carry no ids, so nothing can bind to a manifest row.
 
-A `MISSING` Frame blocks in §11. Nothing else here does.
+A `MISSING` Frame blocks in §10. Nothing else here does.
 
-## 9. Dispatch PR Writer agent
+## 8. Dispatch PR Writer agent
 
 Look for a project PR-writer agent in `.claude/agents/`. Match on the agent's **role, not its
 filename** — a project names its agents for its domain (`ucp-demo-pr-writer`, `gr4ce-pr-writer`), so
@@ -317,14 +335,14 @@ read the frontmatter `name`/`description` of each file and pick the one that wri
 descriptions. Use the Agent tool with `subagent_type` set to that frontmatter `name` and
 `prompt: "Write the PR description for PR #{pr_number}."` Wait for completion.
 
-With Frames from §8, the prompt carries them and asks for a `## Screens` section holding one
-markdown image per captured Frame: the Criterion's id as the alt text, and the URL §8 returned. A reviewer who can see the change without building it
+With Frames from §7, the prompt carries them and asks for a `## Screens` section holding one
+markdown image per captured Frame: the Criterion's id as the alt text, and the URL §7 returned. A reviewer who can see the change without building it
 decides faster than one who reads a description of it, and the images belong in the body rather than
 only in the review comment because the body is what survives on the merged pull request.
 
 If there is none: generate a minimal PR body inline, the Criteria list (verbatim from the Slice) plus `Closes #{issue_number}`, and the same `## Screens` section, and update via `gh pr edit {pr_number} --body-file -` from a heredoc.
 
-## 10. Classify every Criterion, and the AI-discipline pass
+## 9. Classify every Criterion
 
 ### The four states
 
@@ -377,7 +395,7 @@ for `[command]`, the command, the head it ran on, and who ran it (this skill, or
 and URL); a `[command]` `unverified` names the command and its exit code and failing lines, or why it
 was not run;
 `weak` names the `path:line` that appears to implement it; `unverified` names nothing, which is the
-point of the state; `manual` names its Frame from §8, as a filename and a link, and where §8
+point of the state; `manual` names its Frame from §7, as a filename and a link, and where §7
 returned none it names the check the human runs, as it always did.
 
 A Frame does not move a Criterion out of `manual`. It shows that something rendered, which is not
@@ -387,8 +405,8 @@ Red-before-green ordering is not checked. A test carrying the id and a green gat
 contract.
 
 **The four states do not depend on the test Seam.** A Criterion with code and no test carrying its
-id is `weak` in every repository, whether or not §6 found a runnable test command. §11 decides what
-`weak` costs; §10 only decides what is true. Never promote a `weak` Criterion to `verified` because
+id is `weak` in every repository, whether or not §6 found a runnable test command. §10 decides what
+`weak` costs; §9 only decides what is true. Never promote a `weak` Criterion to `verified` because
 no test could have carried its id. The state is the one thing telling the reader that the behaviour
 was not proven, and a repository that cannot prove it needs that said louder, not quieter.
 
@@ -400,19 +418,21 @@ step downstream.
 
 ### Over-specification
 
-More than ten Criteria on one Slice → **warn**, in the review comment and in §15. Never block on the
+More than ten Criteria on one Slice → **warn**, in the review comment and in §14. Never block on the
 count alone. Ten is the threshold above which a Slice is doing too much; that is a fact about the
 Slice's size, to be fixed in the tracker, not in this PR.
 
-### AI-discipline pass
+### What was not verified
 
-Run these inline, not via subagent, since they need Slice context. Load patterns from [references/ai-debris.md](references/ai-debris.md):
+Enumerate what couldn't be verified (e.g., behaviour that needs a manual UI check, integration that
+requires staging credentials). A `manual` Criterion belongs here too, phrased as the check the human
+runs.
 
-- **Scope creep.** Files touched outside the Slice's stated domain (inferred from the issue body + references) → flag.
-- **AI-debris pass.** Walk the diff for each pattern in `references/ai-debris.md` (unrequested defensive code, backwards-compat shims for unused paths, tautological comments, stray TODOs, premature abstractions, mock-only tests, `.skip`/`.only`/`xfail` markers).
-- **Explicit uncertainty.** Enumerate what couldn't be verified (e.g., behaviour that needs a manual UI check, integration that requires staging credentials). A `manual` Criterion belongs here too, phrased as the check the human runs.
+Reviewing the code itself, AI debris and scope creep included, is `/review-pr`'s, whose reviewer
+runs in a fresh context with [../../references/ai-debris.md](../../references/ai-debris.md). This
+session wrote the diff, and the session that wrote a diff is the one least able to see its debris.
 
-## 11. Combine verdicts
+## 10. Combine verdicts
 
 Block if **any** of:
 
@@ -423,9 +443,8 @@ Block if **any** of:
   skip evidence.
 - Any Criterion is `weak`, **and §6 found the test Seam present**. There, a test could have carried
   the id and nobody wrote it, which is the block this skill was built for.
-- Any AI-debris finding is rated blocking
 - Any quality gate failed
-- Any Frame §8 reported `MISSING`. The manifest declared that this Criterion has a Frame and none
+- Any Frame §7 reported `MISSING`. The manifest declared that this Criterion has a Frame and none
   came back, which is a gate that did not run rather than a judgement about the Criterion. It is
   the same rule as a failed quality gate, applied to the one piece of evidence a `manual` Criterion
   can carry.
@@ -439,7 +458,7 @@ Never block on:
 - More than ten Criteria. That is a warning.
 - A `weak` Criterion where §6 found **no test Seam**. This skill has no test command to run there,
   so it cannot hold the author to a test that carries the id, and blocking would ask for something
-  the repository cannot give. It is still reported as `weak` (§10), and §13 names this rule and the
+  the repository cannot give. It is still reported as `weak` (§9), and §12 names this rule and the
   reason the Seam is absent.
 
 **Why the `weak` block is conditional.** A gate that fires on every pull request in a repository
@@ -453,7 +472,7 @@ which state and on what evidence, and the author either writes the test that car
 the Criterion back to the tracker. A human who disagrees can mark the PR ready themselves; this
 skill never takes that away from them.
 
-## 12. Tick verified Criteria on the Slice
+## 11. Tick verified Criteria on the Slice
 
 Tick **only** the `verified` ones, `[command]` included. `weak` is what a tick used to mean, and
 ending that reading is why these four states exist; `manual` is the human's to tick once they have
@@ -461,7 +480,7 @@ run the check.
 
 **The tick is the only edit.** For each verified Criterion, flip its `- [ ]` to `- [x]` on the exact
 line §2 read, and change no other byte: not the text, not the id, not the tag, not the order. What
-§2 found wrong with a Criterion goes in §13 and §15, never into this edit.
+§2 found wrong with a Criterion goes in §12 and §14, never into this edit.
 
 Write it with `gh issue edit {issue_number} --repo {owner}/{repo} --body-file -`. Then leave a
 comment: `gh issue comment {issue_number} --repo {owner}/{repo} --body "PR #{pr_number} verified: …"`
@@ -473,15 +492,24 @@ that succeeds and says something false.
 
 Read the body back and diff it against the body §2 read. The only differences allowed are `[ ]` →
 `[x]` on the ticked lines. Anything else means the edit rewrote the Slice: put the §2 body back,
-and report it in §15. If nothing is verified, skip the edit and the comment.
+and report it in §14. If nothing is verified, skip the edit and the comment.
 
-## 13. Post the review to the PR
+## 12. Write the Criteria report, and post it only when it blocks
 
-Compose a single review body and post it as a tracked review (never `--approve`):
+Compose one report. Where it goes depends on §10's verdict, so that a reviewer reads one comment per
+run rather than two that say halves of the same thing:
 
-```
-gh pr review {pr_number} --comment --body-file -
-```
+- **Blocking** → post it as a tracked review (never `--approve`). `/review-pr` will not run, so this
+  is the only comment the run leaves:
+
+  ```
+  gh pr review {pr_number} --comment --body-file -
+  ```
+
+- **Not blocking** → post nothing. Write the report, without its `##` heading line, to
+  `{scratch}/finalize-{pr_number}-{head, first 7}.md` (`{scratch}` is the session's scratchpad
+  directory, or `$TMPDIR`) and hand the path to `/review-pr` in §13. Its summary carries the report
+  under `### Criteria`, beside the code and security reviews of the same head.
 
 Body structure:
 
@@ -503,10 +531,10 @@ Body structure:
 Command: line on the tracker and re-run. This run held it to the untagged rule.
 ⓘ Tag: #60 C4 is [command] in the Spec and [manual] on #62. The Spec wins; fix #62.
 
-{when §8 reported a Frame MISSING, once per Criterion:}
+{when §7 reported a Frame MISSING, once per Criterion:}
 ✘ #60 C5 - a Frame is declared at `docs/agents/frames.md:9` and none was captured: {reason}. Blocking.
 
-{when §8 did not run, exactly one line saying which of its three reasons applied:}
+{when §7 did not run, exactly one line saying which of its three reasons applied:}
 ⓘ Frames: {not declared in this repository | no [manual] Criterion on this Slice | the Slice's
 Criteria carry no ids}.
 
@@ -516,33 +544,29 @@ Criteria carry no ids}.
 {when the §6 test gate did not run:}
 ⚠ The test gate did not run, so no Criterion can reach verified.
 
-{always, exactly one of these two, naming the rule §11 applied and why:}
+{always, exactly one of these two, naming the rule §10 applied and why:}
 Rule: `weak` blocks. This repository has a test Seam ({what declares it}), so a test could carry a
 Criterion's id.
 Rule: `weak` does not block. This repository has no test Seam ({the §6 reason}), so this skill has
 no test command to hold a Criterion to. `unverified` still blocks.
 
-### AI-discipline findings
-- {pattern name} — `path:line` — {blocking|not} — {why}
-- (or "None.")
-
 ### Not verified
 - {thing the agent couldn't verify} — {how a human can verify it}
 ```
 
-No code-review or spec-drift section. Both belong to `/review-pr`, which posts its own summary.
+No code-review, AI-debris or spec-drift section. All three belong to `/review-pr`.
 
 Every Criterion the Slice owns appears in `### Criteria` with exactly one state and its evidence.
-A Criterion with no state is a bug in §10, not a Criterion to leave out.
+A Criterion with no state is a bug in §9, not a Criterion to leave out.
 
 The `Rule:` line is not conditional. A review that passed and a review that blocked owe the reader
 the same answer: which standard was this held to, and why that one.
 
-## 14. Hand off to `/review-pr` (conditional)
+## 13. Hand off to `/review-pr` (conditional)
 
-- **Not blocking** → run `/review-pr {pr_number}`, inline in this session. It runs the code and
-  security reviews, marks the PR ready if neither blocks, hands it to Copilot and an Auto-fix
-  session, and posts its own summary. Do not mark the PR ready here, and do not background the
+- **Not blocking** → run `/review-pr {pr_number} --criteria {the §12 report path}`, inline in this
+  session. It runs the code and security reviews, marks the PR ready if neither blocks, hands it to
+  Copilot and an Auto-fix session, and posts one summary that carries the §12 report. Do not mark the PR ready here, and do not background the
   hand-off: the session that owns the worktree is the one that can fix what the review finds.
 - **Blocking** → do not invoke `/review-pr`. The PR must be a draft: if an earlier `/review-pr`
   marked it ready, return it with `gh pr ready {pr_number} --undo` and read
@@ -553,7 +577,7 @@ the same answer: which standard was this held to, and why that one.
   `claude -p "PR #{pr_number} is back to draft. Push nothing more until /review-pr hands it back." --cloud {session} --output-format json`.
   Print the fix list locally; do not post additional GitHub noise.
 
-## 15. Local summary
+## 14. Local summary
 
 Name the worktree when running in one, so the PR traces back to the tree that produced it and the
 human knows what is still on disk. `git rev-parse --show-toplevel` gives the path; omit the
@@ -570,7 +594,8 @@ Spec:     {#60 {its title} | lone Slice, no Spec | #60 named, not a Spec | #60 n
 Criteria: {V} verified, {W} weak, {M} manual, {U} unverified   (of {N})
 Worktree: {path}
 
-Gates:    lint ✓  typecheck ✓  format ✓  test {✓|CI|—}   (— = the project does not configure it)
+Gates:    {CI on {head, first 7}: {check names} ✓ | lint ✓  typecheck ✓  format ✓  test {✓|—}}   (— = the project does not configure it)
+Base:     {up to date | behind {base}; /merge-pr will warn before merging}
 Seam:     {present ({what declares it}), `weak` blocks | absent ({the §6 reason}), `weak` does not block}
 Review:   {Not blocking, handed to /review-pr ({its outcome}) | Blocking — see above, /review-pr not run}
 
@@ -578,8 +603,8 @@ Review:   {Not blocking, handed to /review-pr ({its outcome}) | Blocking — see
 ⚠ {N} Criteria on one Slice, above ten. Not blocking.
 ⚠ The test gate did not run, so no Criterion can reach verified.
 ⚠ The Slice's Criteria carry no ids, so no test can be matched to one.
-⚠ {one per §2 tag finding, as in §13}. Not changed on the tracker; fix it there.
-⚠ The §12 edit changed more than the ticks and was reverted.
+⚠ {one per §2 tag finding, as in §12}. Not changed on the tracker; fix it there.
+⚠ The §11 edit changed more than the ticks and was reverted.
 
 Next: {what /review-pr's summary said to do next | Fix the items above and re-run /finalize-pr}
 ```
@@ -589,18 +614,19 @@ tear them down once the PR lands; nothing here should remove either.
 
 ## Rules
 
-- Steps run sequentially. Step 9 depends on Step 8's Frames. Step 14 depends on Step 11's verdict.
+- Steps run sequentially. Step 8 depends on Step 7's Frames. Step 13 depends on Step 10's verdict.
 - Never `--approve`; this skill writes context, the human pulls the merge trigger.
 - Never mark the PR ready. `/review-pr` is the only skill that does.
-- Re-running is safe: gates are stateless, and the PR body and issue body overwrite cleanly. Each run posts a new review comment, and a Not blocking run posts a new `/review-pr` summary too.
-- Don't modify source files. The PR-writer agent may modify the PR body; the AI-discipline pass never touches code.
+- Re-running is safe: gates are stateless, and the PR body and issue body overwrite cleanly. A Blocking run posts a new review comment; a Not blocking run posts none of its own, and its report appears in the new `/review-pr` summary.
+- Don't modify source files. The PR-writer agent may modify the PR body.
+- Where CI runs the quality gates, CI is the gate: never run them again locally, and never read a check rollup for a commit other than the pushed head.
 - If you stop, surface why and what to run next.
-- A gate that did not run is never reported as a gate that passed. Whether it was a tool the project does not configure or a toolchain this skill does not know, §15 names it.
+- A gate that did not run is never reported as a gate that passed. Whether it was a tool the project does not configure or a toolchain this skill does not know, §14 names it.
 - `verified` is the only state that means the behaviour holds. Never report a Criterion verified on diff evidence alone: that is `weak`, and the distinction is the whole point of this skill.
-- `weak` is reported as `weak` in every repository. The test Seam changes what `weak` costs in §11, never what §10 calls it.
+- `weak` is reported as `weak` in every repository. The test Seam changes what `weak` costs in §10, never what §9 calls it.
 - `unverified` blocks everywhere. No test Seam is a reason to hold `weak` to a lower bar; it is never a reason to accept a Criterion with no evidence at all.
-- A GitHub write that returns success is not evidence it took effect. §1, §12 and §14 say what to read back.
+- A GitHub write that returns success is not evidence it took effect. §1, §11 and §13 say what to read back.
 - Read the Slice from the repository `closingIssuesReferences` names, never from the one holding the pull request. Every `gh issue` call in this skill passes `--repo`.
 - A Frame never moves a Criterion out of `manual`. A declared Frame that did not get captured blocks, and that is a gate, not a state.
 - A `[command]` Criterion is `verified` only when its command, as written, exited 0 on this head. Failed, skipped or not run is `unverified` and blocks. A command needing a credential this session lacks is reported as not run, never as passed.
-- Never edit a Criterion's text, id or tag on the Slice. §12 ticks verified checkboxes and nothing else. A missing id or a tag that looks wrong is reported in §13 and §15 for a person to fix.
+- Never edit a Criterion's text, id or tag on the Slice. §11 ticks verified checkboxes and nothing else. A missing id or a tag that looks wrong is reported in §12 and §14 for a person to fix.

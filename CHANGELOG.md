@@ -3,6 +3,32 @@
 Releases 2.2.0 to 2.8.0 shipped without a changelog. Their entries below were written afterwards
 from the version bumps in git history. Numbers in parentheses are pull requests.
 
+## 3.1.0 (unreleased)
+
+Each check after the code is written now runs in one place.
+
+- `/finalize-pr` pushes first and reads the quality gates from CI on the pushed head. It runs lint,
+  typecheck, format and tests locally only in a repository with no CI that runs them. It used to
+  run them locally and then read CI too, and read CI before pushing, so the rollup could belong to
+  an older commit.
+- `/finalize-pr` stops only when the branch conflicts with its base. Being behind no longer stops
+  it, because a `pull_request` check tests the merge with the current base; `/merge-pr` still warns.
+- The AI-debris pass moves from `/finalize-pr` to the `/review-pr` code reviewer, which runs in a
+  fresh context. The catalog is now `references/ai-debris.md`. `/finalize-pr`'s review comment
+  drops its `### AI-discipline findings` section.
+- `/merge-pr` folds its CI step into the Copilot step, which already read the checks.
+- After a `Ready` summary, `/review-pr` reviews only the commits since the head it named, with the
+  whole PR as context, instead of reviewing the whole PR again. An Auto-fix push of a few lines gets
+  a review of those lines. The summary's new `Scope:` line says which ran; a rebase, a force-push or
+  `--full` brings back a full review. `merge-gate.py` reports `last_ready`, and the security prompt
+  (now version 2) takes any revision as `{base}`.
+- One comment per run. A Not blocking `/finalize-pr` no longer posts its own review: it hands its
+  Criteria report to `/review-pr`, whose summary carries it under `### Criteria` with a new
+  `Criteria:` line. A Blocking `/finalize-pr` still posts its report, since `/review-pr` does not
+  run.
+- The code-reviewer agent template says the quality gates and the generic security review belong
+  to other steps, and keeps only the project's own security invariants.
+
 ## 3.0.0 (2026-11-12)
 
 ### Breaking
